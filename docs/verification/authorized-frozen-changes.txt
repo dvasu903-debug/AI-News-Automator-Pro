@@ -1,0 +1,67 @@
+# Authorized Frozen-Module Changes (Modules 1-6)
+#
+# Every file in Modules 1-6 is frozen by default — this list is the
+# explicit exception register. scripts/validate-module-7.sh's step 16
+# reads this file and only fails if a changed frozen-module file is NOT
+# listed here. Each entry must cite the reason it was authorized; "just
+# add the filename" without that is not an acceptable way to extend
+# this list.
+#
+# Format: one path per line, `#` starts a comment, blank lines ignored.
+
+# Module 1 (Core) — the single sanctioned additive registration entry
+# every module uses to add itself to the plugin. One new array line +
+# comment; no existing line altered or removed. (Module 7 build.)
+src/Core/ModuleManifest.php
+
+# Module 1 (Core) — added the missing renderAfterForm() extension hook
+# to the settings-page template method. render() itself is unchanged
+# and still final; this was a genuine architecture gap (four subclasses
+# across Security/AI/Research/Sources illegally overrode the final
+# render() because no other extension point existed) discovered during
+# Module 7 runtime activation validation, not a Module 7 feature.
+src/Core/Settings/AbstractSettingsPage.php
+
+# Module 2 (Security) — sodium_memzero() unconditionally called even
+# when only the sodium_compat polyfill (no native libsodium) is
+# available, which throws (sodium_compat cannot securely wipe memory
+# from pure PHP). Guarded with extension_loaded('sodium'); encryption
+# itself unaffected. Found during Module 7 runtime activation.
+src/Security/Secrets/SodiumEncryptor.php
+
+# Module 2 (Security) — converted the illegal render() override (see
+# AbstractSettingsPage.php above) to renderAfterForm().
+src/Security/Admin/SecuritySettingsPage.php
+
+# Module 2 (Security) — two real bugs found via full test-suite
+# execution (this file's own tests had apparently never been run end
+# to end against real PHP before): (1) IPv6 host literals from
+# wp_parse_url() are returned bracketed ("[::1]"), which neither
+# filter_var(FILTER_VALIDATE_IP) nor inet_pton() accept — brackets are
+# now stripped before IP handling; (2) check order put "missing host"
+# before "scheme not allowed", so file:// URLs (no host component) were
+# misclassified 'malformed' instead of 'scheme' — reordered so scheme
+# is checked first.
+src/Security/Http/UrlGuard.php
+
+# Module 3 (Storage) — MigrationRunner's own progress-logging call
+# depended on the shared, Storage-rebound LoggerInterface
+# (TableBackedLogger, which requires the ana_logs table) — meaning the
+# very first migration run on a fresh database would fail trying to log
+# that it was creating the table that logging itself depends on.
+# MigrationRunner now gets a dedicated OptionBackedLogger instance
+# instead. Found during Module 7 runtime activation (first genuine
+# fresh-install activation this project had ever undergone).
+src/Storage/StorageServiceProvider.php
+
+# Module 4 (AI) — converted the illegal render() override (see
+# AbstractSettingsPage.php above) to renderAfterForm().
+src/AI/Admin/AISettingsPage.php
+
+# Module 5 (Sources) — converted the illegal render() override (see
+# AbstractSettingsPage.php above) to renderAfterForm().
+src/Sources/Admin/SourcesSettingsPage.php
+
+# Module 6 (Research) — converted the illegal render() override (see
+# AbstractSettingsPage.php above) to renderAfterForm().
+src/Research/Admin/ResearchSettingsPage.php

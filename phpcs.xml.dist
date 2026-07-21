@@ -1,0 +1,228 @@
+<?xml version="1.0"?>
+<ruleset name="AINewsAutomatorPro">
+    <description>
+        WordPress Coding Standards for AI News Automator Pro, scoped to
+        what is actionable for this codebase.
+
+        POLICY (agreed 2026-07-19, after a full PHPCS source report against
+        a fresh tree): keep every correctness, security, SQL, escaping,
+        and code-analysis sniff active; suppress only formatting and
+        naming sniffs that conflict with the project's deliberate,
+        established style. That style was verified empirically before
+        suppressing anything: across all 374 PHP files in frozen Modules
+        1-6, indentation is 4-space in 374/374 files (zero tabs), array
+        literals are short [] syntax in every file that has any (zero
+        array()), braces are Allman style, call signatures are PSR-12,
+        and => operators use deliberate column alignment in entity
+        toRow()/enum/match blocks throughout. Module 7 follows the same
+        conventions. Conforming to WordPress-core formatting instead
+        would mean reformatting every module including frozen ones, for
+        zero functional benefit.
+
+        MECHANISM NOTE, two different tools for two different problems:
+        severity-0 suppresses a sniff's REPORTED violations but the sniff
+        still RUNS; a real exclude removes it from execution entirely.
+        Generic.PHP.Syntax must use the exclude form: it shells out to
+        php -l via shell_exec(), which this project's validation host
+        disables, so if it merely had severity 0 it would still execute
+        and crash PHPCS with exit code 255 (this exact regression
+        happened once; confirmed via a -vv trace). It is redundant here
+        anyway: scripts/validate-module-7.sh step 2 runs real php -l
+        directly across every file first. Every other suppressed sniff
+        runs harmlessly and only needs its reporting silenced, and for
+        those severity-0 is REQUIRED rather than nested excludes:
+        "WordPress" is a composite standard that pulls the same
+        underlying sniffs in through multiple sub-standard paths, and a
+        nested exclude only cuts the one path it is attached to
+        (confirmed by a before/after run showing near-zero change).
+
+        KEPT ACTIVE deliberately (the point of running PHPCS at all):
+        WordPress.Security.* (escaping, nonces, capability checks),
+        WordPress.DB.* (prepared statements, direct-query flags),
+        Universal.Operators.StrictComparisons and
+        WordPress.PHP.StrictInArray (loose-comparison detection -
+        correctness, not style), Generic.CodeAnalysis.* (dead code,
+        unused parameters), and everything else not explicitly listed
+        below.
+    </description>
+
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <file>src</file>
+
+    <rule ref="WordPress">
+        <exclude name="Generic.PHP.Syntax"/>
+    </rule>
+
+    <!-- ===============================================================
+         Naming and documentation conventions: PSR-4/typed-PHP project
+         policy vs WordPress-core legacy conventions.
+         =============================================================== -->
+
+    <!-- Wants class-my-thing.php names; incompatible with Composer PSR-4
+         autoloading, which requires filename == class name. -->
+    <rule ref="WordPress.Files.FileName">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Wants snake_case; project uses PSR camelCase throughout. -->
+    <rule ref="WordPress.NamingConventions.ValidVariableName">
+        <severity>0</severity>
+    </rule>
+    <rule ref="WordPress.NamingConventions.ValidFunctionName">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Pre-strict_types convention; codebase uses declare(strict_types=1)
+         and === throughout, the failure mode Yoda guards against. -->
+    <rule ref="WordPress.PHP.YodaConditions">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Mandatory docblock-tag checklists on fully-typed signatures.
+         Substantive rationale docblocks are this project's actual
+         documentation style; mechanical @param/@return tags on
+         self-describing typed methods are not. -->
+    <rule ref="Squiz.Commenting.FunctionComment">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Commenting.FileComment">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Commenting.ClassComment">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Commenting.VariableComment">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Commenting.InlineComment">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Commenting.FunctionCommentThrowTag">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Generic.Commenting.DocComment">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Style preference, not correctness. -->
+    <rule ref="Universal.Operators.DisallowShortTernary">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Purely informational: flags WorkflowScheduler's custom cron
+         interval, which is deliberate and documented (Decision 2). -->
+    <rule ref="WordPress.WP.CronInterval">
+        <severity>0</severity>
+    </rule>
+
+    <!-- ===============================================================
+         Formatting: WPCS 3.x composes Generic/PEAR/Squiz/Universal/
+         NormalizedArrays sniffs enforcing WordPress-core formatting
+         (tabs, K&R braces, array(), spaces-inside-parens, PEAR call
+         signatures, no-alignment). Project style is PSR-12 with
+         deliberate column alignment, uniform across all modules -
+         verified empirically, see POLICY above.
+         =============================================================== -->
+
+    <!-- Tabs vs spaces: project is 4-space, 374/374 files. -->
+    <rule ref="Generic.WhiteSpace.DisallowSpaceIndent">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Universal.WhiteSpace.PrecisionAlignment">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Short array syntax: project-wide []. -->
+    <rule ref="Universal.Arrays.DisallowShortArraySyntax">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Generic.Arrays.DisallowShortArraySyntax">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Brace style: project is Allman (opening brace own line). -->
+    <rule ref="Generic.Functions.OpeningFunctionBraceKernighanRitchie">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Generic.Classes.OpeningBraceSameLine">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Call/declaration signature formatting: project is PSR-12. -->
+    <rule ref="PEAR.Functions.FunctionCallSignature">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Generic.Functions.FunctionCallArgumentSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Functions.FunctionDeclarationArgumentSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Functions.MultiLineFunctionDeclaration">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Parens/operator/cast/control-structure spacing: WPCS wants
+         spaces inside parens and forbids alignment padding; project
+         uses PSR-12 spacing with deliberate column-aligned => in
+         entity/enum/match blocks (verified consistent project-wide,
+         not one generated file - the alignment is systematic across
+         every module's toRow()/enum/match code). -->
+    <rule ref="WordPress.WhiteSpace.ControlStructureSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="WordPress.WhiteSpace.OperatorSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="WordPress.WhiteSpace.CastStructureSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Generic.WhiteSpace.ArbitraryParenthesesSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Generic.Formatting.MultipleStatementAlignment">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.Strings.ConcatenationSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Squiz.WhiteSpace.SuperfluousWhitespace">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Array formatting family: WPCS array-declaration conventions
+         (per-line item rules, key-spacing restrictions, alignment
+         requirements) conflict with the project's aligned style. -->
+    <rule ref="WordPress.Arrays.ArrayDeclarationSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="WordPress.Arrays.ArrayIndentation">
+        <severity>0</severity>
+    </rule>
+    <rule ref="WordPress.Arrays.ArrayKeySpacingRestrictions">
+        <severity>0</severity>
+    </rule>
+    <rule ref="WordPress.Arrays.MultipleStatementAlignment">
+        <severity>0</severity>
+    </rule>
+    <rule ref="NormalizedArrays.Arrays.ArrayBraceSpacing">
+        <severity>0</severity>
+    </rule>
+    <rule ref="NormalizedArrays.Arrays.CommaAfterLast">
+        <severity>0</severity>
+    </rule>
+
+    <!-- Two single-occurrence style preferences, not correctness:
+         self:: vs static:: in a final class, and standalone $x++ vs
+         ++$x. Found in the same full source-report pass as the rest of
+         this section. -->
+    <rule ref="Universal.CodeAnalysis.StaticInFinalClass">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Universal.Operators.DisallowStandalonePostIncrementDecrement">
+        <severity>0</severity>
+    </rule>
+</ruleset>
