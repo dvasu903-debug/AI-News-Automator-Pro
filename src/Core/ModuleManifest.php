@@ -78,6 +78,16 @@ final class ModuleManifest
             // — that table remains unused by this module, reserved for
             // Module 8 — see MODULE_7_WORKFLOW_ENGINE_DESIGN.md Part 1.
             \AINewsAutomator\Workflow\WorkflowServiceProvider::class,
+
+            // Publishing eighth: depends on Core, Storage
+            // (ArticleRepositoryInterface, migration framework, event
+            // dispatcher) in this milestone. Deliberately has NO
+            // dependency on Storage\Contracts\WorkflowRepositoryInterface
+            // / ana_workflows (superseded, see MODULE_8_PUBLISHING_ENGINE_DESIGN.md
+            // §1) and no dependency on Workflow's internals beyond the
+            // public ActionInterface/ActionRegistryInterface/WorkflowRunner
+            // surface once the action milestone lands.
+            \AINewsAutomator\Publishing\PublishingServiceProvider::class,
         ];
 
         /**

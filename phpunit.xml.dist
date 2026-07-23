@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache">
+    <testsuites>
+        <testsuite name="Core">
+            <directory>tests/Core</directory>
+        </testsuite>
+        <testsuite name="Security">
+            <directory>tests/Security</directory>
+        </testsuite>
+        <testsuite name="Storage">
+            <directory>tests/Storage</directory>
+        </testsuite>
+        <testsuite name="AI">
+            <directory>tests/AI</directory>
+        </testsuite>
+        <testsuite name="Sources">
+            <directory>tests/Sources</directory>
+        </testsuite>
+        <testsuite name="Research">
+            <directory>tests/Research</directory>
+        </testsuite>
+        <testsuite name="Workflow">
+            <directory>tests/Workflow</directory>
+        </testsuite>
+        <testsuite name="Publishing">
+            <directory>tests/Publishing</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+</phpunit>

@@ -65,3 +65,22 @@ src/Sources/Admin/SourcesSettingsPage.php
 # Module 6 (Research) — converted the illegal render() override (see
 # AbstractSettingsPage.php above) to renderAfterForm().
 src/Research/Admin/ResearchSettingsPage.php
+
+# Module 3 (Storage) — stale-claim recovery added to
+# QueueRepository::claimNextForWorker(). Found during Module 7 runtime
+# validation Item 14: a worker dying mid-job left its row
+# status=processing forever, and NOTHING in the system ever revisited it
+# — claimNextForWorker() claimed only pending rows, and release() was
+# only invoked by schedulers declining foreign job types. Empirically
+# proven on the live validation environment (an orphaned processing job
+# returned 0 from every subsequent claim). The validation script's own
+# Item 14 text asserted "this is Storage's own queue guarantee" — a
+# guarantee that was assumed but never implemented. Fix (approved,
+# Option 1 of three presented): the claim path now first reclaims
+# processing jobs whose locked_at exceeds a filterable stale timeout
+# (default 900s), counting each crashed execution as a failed attempt
+# (attempts + 1) so repeat-crashing jobs still exhaust max_attempts and
+# land in job history as failed via the same terminal path markFailure()
+# uses. Pending-claim behavior unchanged. Covered by
+# tests/Storage/QueueStaleReclaimTest.php (4 scenarios).
+src/Storage/Repositories/QueueRepository.php

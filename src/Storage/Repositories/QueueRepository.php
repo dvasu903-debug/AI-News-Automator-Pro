@@ -142,9 +142,19 @@ final class QueueRepository extends AbstractRepository implements QueueRepositor
         return $entities;
     }
 
+    /**
+     * How long a claimed (status=processing) job's lock is honored before
+     * any other worker's claim call may reclaim it as abandoned.
+     * Filterable via 'ai_news_automator_queue_stale_lock_timeout'.
+     */
+    private const STALE_LOCK_TIMEOUT_SECONDS = 900;
+
     public function claimNextForWorker(string $worker, int $limit = 1): array
     {
-        return $this->transactions->transactional(function () use ($worker, $limit): array {
+        /** @var list<array{0: QueueJob, 1: string}> $exhausted */
+        $exhausted = [];
+
+        $claimed = $this->transactions->transactional(function () use ($worker, $limit, &$exhausted): array {
             $now = EntityDates::now();
 
             // This one method bypasses the fluent QueryBuilder deliberately:
@@ -154,6 +164,65 @@ final class QueueRepository extends AbstractRepository implements QueueRepositor
             // prepared-statement methods — no value is ever concatenated.
             $table = $this->connection->table(Tables::QUEUE);
 
+            // --- Stale-claim recovery sweep (authorized post-freeze fix —
+            // see docs/verification/authorized-frozen-changes.txt). A worker
+            // that dies mid-job leaves its row status=processing forever,
+            // and nothing else in the system ever revisits it (empirically
+            // confirmed during Module 7 runtime validation, Item 14: an
+            // orphaned processing job was invisible to every subsequent
+            // claim call). Recovery lives here, in the claim path itself,
+            // so it needs no extra cron or sweep process: any healthy
+            // worker's next claim heals the queue. The crashed execution
+            // counts as a failed attempt (attempts + 1), so a job that
+            // repeatedly kills its workers still exhausts max_attempts and
+            // lands in job history as failed — the same terminal path
+            // markFailure() uses — rather than crash-looping forever.
+            $timeout = (int) apply_filters(
+                'ai_news_automator_queue_stale_lock_timeout',
+                self::STALE_LOCK_TIMEOUT_SECONDS
+            );
+            $cutoff = EntityDates::toMysql($now->modify(sprintf('-%d seconds', $timeout)));
+
+            $stale = $this->connection->select(
+                "SELECT * FROM `{$table}` WHERE status = %s AND locked_at <= %s LIMIT %d FOR UPDATE",
+                [JobStatus::Processing->value, $cutoff, 50]
+            );
+
+            foreach ($stale as $staleRow) {
+                $staleJob = $this->hydrate($staleRow);
+                $nextAttempts = $staleJob->attempts + 1;
+
+                if ($nextAttempts < $staleJob->maxAttempts) {
+                    $this->connection->update(Tables::QUEUE, [
+                        'status'    => JobStatus::Pending->value,
+                        'attempts'  => $nextAttempts,
+                        'worker'    => null,
+                        'locked_at' => null,
+                        'error'     => sprintf(
+                            'Reclaimed from worker "%s": lock exceeded stale timeout (%d seconds).',
+                            (string) $staleJob->worker,
+                            $timeout
+                        ),
+                    ], ['id' => (int) $staleJob->id]);
+                    continue;
+                }
+
+                $error = sprintf(
+                    'Abandoned by worker "%s" and out of attempts (%d of %d): removed by stale-lock reclaim.',
+                    (string) $staleJob->worker,
+                    $nextAttempts,
+                    $staleJob->maxAttempts
+                );
+
+                $this->deleteRow((int) $staleJob->id);
+                $this->jobHistory->recordFromQueue(
+                    JobHistoryEntry::fromQueueJob($staleJob, JobStatus::Failed, null, $error)
+                );
+                $exhausted[] = [$staleJob, $error];
+            }
+
+            // --- Normal pending claim, unchanged. Jobs re-pended by the
+            // sweep above are immediately eligible here, in this same call.
             $candidates = $this->connection->select(
                 "SELECT id FROM `{$table}` WHERE status = %s AND (run_after IS NULL OR run_after <= %s) ORDER BY priority DESC, created_at ASC LIMIT %d FOR UPDATE",
                 [JobStatus::Pending->value, EntityDates::toMysql($now), $limit]
@@ -180,6 +249,20 @@ final class QueueRepository extends AbstractRepository implements QueueRepositor
 
             return array_map(fn (array $row) => $this->hydrate($row), $claimed);
         });
+
+        // Events dispatch after the transaction commits, matching
+        // markSuccess()/markFailure()'s established pattern.
+        foreach ($exhausted as [$staleJob, $error]) {
+            $this->events->dispatch(new JobFailedEvent(
+                $this->metadataFactory->create('Storage', ['job_id' => $staleJob->id]),
+                jobId: (int) $staleJob->id,
+                jobType: $staleJob->jobType,
+                error: $error,
+                willRetry: false,
+            ));
+        }
+
+        return $claimed;
     }
 
     public function markSuccess(int $jobId, ?array $result = null): void
