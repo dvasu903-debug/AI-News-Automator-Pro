@@ -13,8 +13,43 @@ Automator Pro), Vertical (News).
 | 4 | AI Provider Engine | Frozen |
 | 5 | Source Connectors | Frozen |
 | 6 | Research Engine | Frozen |
-| 7 | Workflow Engine | **Frozen — 2026-07-21** |
-| 8 | Publishing Engine | Not started |
+| 7 | Workflow Engine | Frozen — 2026-07-21 |
+| 8 | Publishing Engine | **Milestone 2 frozen — 2026-07-23** (Milestone 3 next) |
+
+## Module 8 — Milestone 2 (Publishing Profiles) freeze record
+
+**Status: MILESTONE 2 FROZEN — 2026-07-23.** Module 8 as a whole remains
+in progress; Milestone 3 (Planner/Validator/Scheduler) has not started.
+
+Milestone 2 adds Publishing Profile management (CRUD, single-writer
+default via `is_default`, structural `approval_mode` validation with no
+invented enum) on top of Milestone 1's `DraftRepository` foundation.
+Full local pipeline (`php -l`, PHPUnit — 490 tests/826 assertions/1
+documented incomplete, PHPCS) and runtime verification against a real
+database (MariaDB + WordPress 6.8.3 `wpdb`/`dbDelta` via the production
+boot path, then a live Hostinger smoke test) both passed. Evidence
+trail: `docs/verification/2026-07-23-module-8-milestone-2-local-verification.md`
+and `docs/verification/2026-07-23-module-8-milestone-2-runtime-verification.md`.
+
+One genuine concurrency defect was found during runtime verification —
+reachable only under real parallel execution, not catchable by the unit
+suite's synchronous fakes:
+
+1. `PublishingProfileRepository::markDefault()`'s demote step read the
+   current default via an unlocked `SELECT` and demoted only that row —
+   under concurrent calls, two transactions could both act on a stale
+   snapshot, leaving two `is_default = 1` rows. Fixed by demoting via a
+   single blanket exact-match `UPDATE ... WHERE is_default = 1`, which
+   takes row locks on every currently-default row and serializes
+   concurrent callers. Re-verified: 300+ interleaved concurrent switches
+   across four runs, always exactly one default.
+
+Also fixed: the CI workflow's PHPCS step previously hard-failed the
+build on any finding, which doesn't match this project's own documented
+PHPCS policy (`phpcs.xml.dist`'s policy note, `scripts/validate-module-7.sh`'s
+convention) — exit 1 (findings) is now treated as reviewed baseline
+debt, not a blocker; only PHPCS itself failing to execute still fails
+the build. Workflow-only change; no `src/` files touched.
 
 ## Module 7 — freeze record
 
@@ -48,16 +83,14 @@ catchable by the unit test suite's fake-DB harness:
 for every future module): validation report, `authorized-frozen-changes.txt`,
 `CHANGELOG.md`, `RELEASE_NOTES.md`.
 
-## Module 8 — Publishing Engine (next)
+## Module 8 — Milestone 3 (next)
 
-Scope, architecture, and design to be captured in
-`MODULE_8_PUBLISHING_ENGINE_DESIGN.md` before implementation begins, per
-the project's standing audit-before-code discipline. High-level scope
-(from the approved brief): draft lifecycle, WordPress post integration,
-the research → generation → validation → publish → post-process → events
-pipeline, publishing profiles, editorial approval modes, a defined set of
-publishing events, and REST controllers — built as an independent module
-integrating with the frozen Modules 1–7 without modifying them.
+Milestone 3 (Planner / Validator / Scheduler and the remaining
+research → generation → validation → publish → post-process → events
+pipeline, editorial approval workflow integration, publishing events,
+and REST controllers) begins now that Milestone 2 is frozen, per
+`MODULE_8_PUBLISHING_ENGINE_DESIGN.md`'s incremental delivery plan and
+the project's standing audit-before-code discipline.
 
 ## Guiding principles (unchanged since Module 1)
 
