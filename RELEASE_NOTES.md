@@ -1,5 +1,72 @@
 # Release Notes
 
+## 2.0.0-dev — Module 8 Milestone 3 (PublishingService / Validator / Scheduler) frozen
+
+**Date:** 2026-07-23
+
+### What's new
+
+Milestone 3 adds the publishing operations themselves on top of
+Milestone 2's profile management: `PublisherInterface`/
+`PublishingService` (`publish`, `schedule`, `unpublish`, `archive`),
+`EditorialPolicyInterface`/`DefaultEditorialPolicy` (AI-generation
+disclosure and word-count policy checks), four new Workflow actions
+registered into the previously-unused `ActionRegistryInterface`
+extension point, six new Publishing domain events, `PublishingAbilityPolicy`,
+a REST controller, and a health check. See `docs/adr/0018-*.md` for how
+the milestone's four named components (PublishingService / Planner /
+Validator / Scheduler — the last two terms had no prior definition
+anywhere in the project) were interpreted and scoped, and why the
+AI-generation pipeline (draft content generation, AI-backed validation)
+is explicitly deferred to a future milestone.
+
+### Fixed
+
+Nothing — this milestone's runtime verification found no defects (see
+"Validated" below), unlike Milestone 2's pass which found and fixed a
+concurrency race in `markDefault()`.
+
+### Validated
+
+Full local pipeline (`php -l`, PHPUnit — 522 tests/895 assertions, 1
+documented incomplete — PHPCS) plus two independent runtime passes: a
+local real-database harness (MariaDB 10.11 + WordPress 6.8.3
+`wpdb`/`dbDelta` via the production boot path) with explicit,
+reproducible, assertion-backed checks across all six required areas —
+PublishingService operations (publish/schedule/unpublish/archive, each
+confirmed by database state and dispatched event), REST endpoint
+registration and invocation, Workflow action registration and end-to-end
+execution, event dispatch, authorization policy decisions via the real
+`CapabilityGate`/`PolicyEngine`, and health check registration — and a
+live Hostinger smoke test confirming the deployed artifact (`git pull`
+to the frozen commit, `composer install --no-dev`) runs fault-free on
+the real production stack for its core publish/archive/unpublish
+operations, including the AI-generated-draft `approve()` branch. Full
+report: `docs/verification/2026-07-23-module-8-milestone-3-runtime-verification.md`.
+
+### Known, documented, non-blocking findings
+
+- `EditorialPolicyInterface`'s citation-count and Research-confidence
+  checks are not yet implemented — they require
+  `Research\DTO\ResearchSummary` integration, part of the deferred
+  AI-generation milestone.
+- The Hostinger smoke test's scope was narrower than the local harness's
+  (core PublishingService operations only, not REST/Actions/Events/
+  Authorization/HealthCheck) — accepted, since the local harness's
+  coverage of those areas is real and assertion-backed against an
+  equivalent real-database stack; see the runtime report's "Scope of the
+  Hostinger pass" section for the precise boundary.
+- REST controllers and health checks have no dedicated unit tests
+  anywhere in this codebase (established precedent across every
+  module, not specific to this milestone) — covered instead by the
+  runtime passes above.
+
+### Compatibility
+
+No breaking changes to Modules 1–7 or Module 8 Milestones 1–2. No new
+migrations; no changes to any frozen module (`PublishingAbilityPolicy`
+maps to existing `Capabilities` constants rather than adding new ones).
+
 ## 2.0.0-dev — Module 8 Milestone 2 (Publishing Profiles) frozen
 
 **Date:** 2026-07-23

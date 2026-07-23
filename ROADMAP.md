@@ -14,7 +14,40 @@ Automator Pro), Vertical (News).
 | 5 | Source Connectors | Frozen |
 | 6 | Research Engine | Frozen |
 | 7 | Workflow Engine | Frozen — 2026-07-21 |
-| 8 | Publishing Engine | **Milestone 2 frozen — 2026-07-23** (Milestone 3 next) |
+| 8 | Publishing Engine | **Milestone 3 frozen — 2026-07-23** (Milestone 4 next) |
+
+## Module 8 — Milestone 3 (PublishingService / Validator / Scheduler) freeze record
+
+**Status: MILESTONE 3 FROZEN — 2026-07-23.** Module 8 as a whole remains
+in progress; Milestone 4 (the AI-generation pipeline) has not started.
+
+Milestone 3 adds `PublisherInterface`/`PublishingService`
+(publish/schedule/unpublish/archive), `EditorialPolicyInterface`/
+`DefaultEditorialPolicy` (AI-disclosure + word-count checks), four new
+Workflow actions (the first real use of the previously-unused
+`ActionRegistryInterface` extension point), six new Publishing events,
+`PublishingAbilityPolicy`, a REST controller (profile list/create plus
+the four publish operations), and `PublishingHealthCheck`. See
+ADR-0018 for the full scope reasoning, including why "Planner" (named
+in the Milestone 2 freeze checklist with no further definition anywhere)
+collapses into existing components rather than becoming a new
+speculative class, and why the AI-generation pipeline is explicitly
+deferred.
+
+Full local pipeline (`php -l`, PHPUnit — 522 tests/895 assertions/1
+documented incomplete, PHPCS) and two independent runtime passes both
+passed with no defects found: a local real-database harness (MariaDB +
+WordPress 6.8.3 `wpdb`/`dbDelta` via the production boot path) covering
+all six required areas — PublishingService operations, REST endpoints,
+Workflow actions, event dispatch, authorization policies, and health
+check registration — with explicit, reproducible, assertion-backed
+results; and a live Hostinger smoke test confirming the deployed
+artifact runs fault-free on the real production stack. Evidence trail:
+`docs/verification/2026-07-23-module-8-milestone-3-runtime-verification.md`.
+
+Unlike Milestone 2's runtime pass (which found and fixed the D12
+concurrency race), this pass found nothing to fix — ADR-0018's
+architecture and scope decisions stand unchanged.
 
 ## Module 8 — Milestone 2 (Publishing Profiles) freeze record
 
@@ -83,14 +116,15 @@ catchable by the unit test suite's fake-DB harness:
 for every future module): validation report, `authorized-frozen-changes.txt`,
 `CHANGELOG.md`, `RELEASE_NOTES.md`.
 
-## Module 8 — Milestone 3 (next)
+## Module 8 — Milestone 4 (next)
 
-Milestone 3 (Planner / Validator / Scheduler and the remaining
-research → generation → validation → publish → post-process → events
-pipeline, editorial approval workflow integration, publishing events,
-and REST controllers) begins now that Milestone 2 is frozen, per
-`MODULE_8_PUBLISHING_ENGINE_DESIGN.md`'s incremental delivery plan and
-the project's standing audit-before-code discipline.
+Milestone 4 (the AI-generation pipeline: `GenerateAction` consuming
+`AIManager` + `Research\DTO\ResearchSummary`, AI-backed content
+validation extending `EditorialPolicyInterface`, and `PostProcessAction`)
+begins now that Milestone 3 is frozen, per
+`MODULE_8_PUBLISHING_ENGINE_DESIGN.md`'s incremental delivery plan,
+ADR-0018's explicit deferral, and the project's standing
+audit-before-code discipline.
 
 ## Guiding principles (unchanged since Module 1)
 

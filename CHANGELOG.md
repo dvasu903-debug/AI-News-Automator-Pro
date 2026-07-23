@@ -6,6 +6,23 @@ project is pre-release; entries below cover the 2.0.0-dev line.
 ## [Unreleased — 2.0.0-dev]
 
 ### Added
+- **Publishing (Module 8, Milestone 3):** `PublisherInterface`/
+  `PublishingService` (publish/schedule/unpublish/archive —
+  `publish()` reuses the frozen `ArticleRepositoryInterface::approve()`
+  for AI-generated drafts, `wp_update_post()` directly otherwise;
+  `schedule()` uses WordPress-native `post_status=future`; `archive()`
+  uses WordPress-native `post_status=private`), `EditorialPolicyInterface`/
+  `DefaultEditorialPolicy` (AI-disclosure and word-count policy checks),
+  four new Workflow actions (`PublishDraftAction`, `ScheduleDraftAction`,
+  `UnpublishAction`, `ArchiveAction` — the first real use of the
+  previously-unused `ActionRegistryInterface` extension point), six new
+  Publishing events, `PublishingAbilityPolicy` (maps to existing
+  `Capabilities` constants, no changes to that frozen class), a REST
+  controller (`/publishing/profiles` list/create plus
+  publish/schedule/unpublish/archive), and `PublishingHealthCheck`. See
+  ADR-0018 for the full scope reasoning, including the "Planner"
+  interpretation and the explicit deferral of the AI-generation
+  pipeline to a future milestone.
 - **Publishing (Module 8, Milestone 2):** Publishing Profile management —
   `PublishingProfileService`/`PublishingProfileRepository` CRUD,
   single-writer `is_default` promotion/demotion, structural-only
@@ -75,3 +92,12 @@ project is pre-release; entries below cover the 2.0.0-dev line.
   `requireDefault()` failure path, admin loads clean) — both passed;
   see docs/verification/2026-07-23-module-8-milestone-2-local-verification.md
   and docs/verification/2026-07-23-module-8-milestone-2-runtime-verification.md.
+- Module 8 Milestone 3 (PublishingService/EditorialPolicy/Actions) full
+  local pipeline (522 tests, 895 assertions, 1 documented incomplete)
+  and two independent runtime passes — a local real-database harness
+  covering all six required areas (PublishingService operations, REST
+  endpoints, Workflow actions, event dispatch, authorization policies,
+  health check registration) with explicit assertions, and a live
+  Hostinger smoke test on the deployed artifact — both passed with no
+  defects found; see
+  docs/verification/2026-07-23-module-8-milestone-3-runtime-verification.md.
