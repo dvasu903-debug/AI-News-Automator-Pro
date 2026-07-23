@@ -82,6 +82,30 @@ if (!function_exists('absint')) {
     }
 }
 
+if (!class_exists('WP_Error')) {
+    class WP_Error
+    {
+        public function __construct(
+            public string $code = '',
+            public string $message = '',
+            public mixed $data = ''
+        ) {
+        }
+
+        public function get_error_message(): string
+        {
+            return $this->message;
+        }
+    }
+}
+
+if (!function_exists('is_wp_error')) {
+    function is_wp_error(mixed $thing): bool
+    {
+        return $thing instanceof WP_Error;
+    }
+}
+
 if (!function_exists('wp_generate_uuid4')) {
     function wp_generate_uuid4(): string
     {
@@ -315,5 +339,53 @@ if (!function_exists('update_post_meta')) {
     {
         $GLOBALS['__ana_test_postmeta'][$postId][$key] = $value;
         return true;
+    }
+}
+
+// Minimal WP_Post + get_post()/wp_strip_all_tags() additions for
+// Publishing Milestone 3 tests (PublishingService/DefaultEditorialPolicy
+// need to read a post's content, not just write one). Tests seed
+// $GLOBALS['__ana_test_posts'][$id] directly with whatever fields the
+// scenario needs; get_post() hydrates a WP_Post from that array.
+if (!class_exists('WP_Post')) {
+    class WP_Post
+    {
+        public int $ID;
+        public string $post_title = '';
+        public string $post_content = '';
+        public string $post_status = 'draft';
+        public string $post_date = '';
+
+        /**
+         * @param array<string, mixed> $data
+         */
+        public function __construct(array $data)
+        {
+            $this->ID = (int) ($data['ID'] ?? 0);
+            $this->post_title = (string) ($data['post_title'] ?? '');
+            $this->post_content = (string) ($data['post_content'] ?? '');
+            $this->post_status = (string) ($data['post_status'] ?? 'draft');
+            $this->post_date = (string) ($data['post_date'] ?? '');
+        }
+    }
+}
+
+if (!function_exists('get_post')) {
+    function get_post(int $postId): ?WP_Post
+    {
+        $data = $GLOBALS['__ana_test_posts'][$postId] ?? null;
+
+        if ($data === null) {
+            return null;
+        }
+
+        return new WP_Post(array_merge(['ID' => $postId], $data));
+    }
+}
+
+if (!function_exists('wp_strip_all_tags')) {
+    function wp_strip_all_tags(string $text): string
+    {
+        return trim(strip_tags($text));
     }
 }
