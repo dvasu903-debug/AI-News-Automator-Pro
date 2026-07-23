@@ -216,6 +216,18 @@ function esc_attr(string $text): string
     return htmlspecialchars($text, ENT_QUOTES);
 }
 
+function wp_kses_post(string $content): string
+{
+    // Simplified stand-in for WordPress core's wp_kses_post() — see
+    // docs/adr/0019-ai-generation-pipeline-scope-and-trust-boundary.md.
+    $content = (string) preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', '', $content);
+    $allowed = '<p><a><strong><em><b><i><ul><ol><li><h1><h2><h3><h4><h5><h6><blockquote><br><span><img>';
+    $content = strip_tags($content, $allowed);
+    $content = (string) preg_replace('/\son\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $content);
+
+    return (string) preg_replace('/(href|src)\s*=\s*("|\')\s*javascript:[^"\']*\2/i', '$1=$2#$2', $content);
+}
+
 function esc_url_raw(string $url): string
 {
     return $url;

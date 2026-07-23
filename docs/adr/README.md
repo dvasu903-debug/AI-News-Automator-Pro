@@ -24,5 +24,6 @@ Format: lightweight (Context / Decision / Consequences / Alternatives Considered
 | [0016](0016-modules-own-temporary-infrastructure.md) | Modules Own Temporary Infrastructure Until a Shared Abstraction Exists | Cross-cutting (Module 5) |
 | [0017](0017-extraction-trigger-met-but-deferred.md) | Extraction Trigger Met But Deferred | 6 (applies to Module 7) |
 | [0018](0018-publishing-milestone-3-scope-and-planner-interpretation.md) | Publishing Milestone 3 Scope and "Planner" Interpretation | 8 |
+| [0019](0019-ai-generation-pipeline-scope-and-trust-boundary.md) | AI-Generation Pipeline Scope and Trust Boundary | 8 |
 
 New ADRs are added here as Module 6+ introduces its own non-obvious, expensive-to-reverse decisions — not for every choice, only ones a future maintainer would otherwise have to re-derive from scratch or might accidentally reverse without realizing it was deliberate.

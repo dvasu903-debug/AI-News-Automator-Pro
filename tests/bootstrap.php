@@ -61,6 +61,31 @@ if (!function_exists('esc_html__')) {
     }
 }
 
+if (!function_exists('esc_html')) {
+    function esc_html(string $text): string
+    {
+        return htmlspecialchars($text, ENT_QUOTES);
+    }
+}
+
+if (!function_exists('wp_kses_post')) {
+    /**
+     * A simplified stand-in for WordPress core's wp_kses_post() —
+     * sufficient for unit-testing this project's sanitize-then-splice
+     * trust boundary (see docs/adr/0019-ai-generation-pipeline-scope-and-trust-boundary.md),
+     * not a full reimplementation of core's tag/attribute allowlist.
+     */
+    function wp_kses_post(string $content): string
+    {
+        $content = (string) preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', '', $content);
+        $allowed = '<p><a><strong><em><b><i><ul><ol><li><h1><h2><h3><h4><h5><h6><blockquote><br><span><img>';
+        $content = strip_tags($content, $allowed);
+        $content = (string) preg_replace('/\son\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $content);
+
+        return (string) preg_replace('/(href|src)\s*=\s*("|\')\s*javascript:[^"\']*\2/i', '$1=$2#$2', $content);
+    }
+}
+
 if (!function_exists('sanitize_text_field')) {
     function sanitize_text_field(string $str): string
     {
@@ -339,6 +364,13 @@ if (!function_exists('update_post_meta')) {
     {
         $GLOBALS['__ana_test_postmeta'][$postId][$key] = $value;
         return true;
+    }
+}
+
+if (!function_exists('get_post_meta')) {
+    function get_post_meta(int $postId, string $key = '', bool $single = false): mixed
+    {
+        return $GLOBALS['__ana_test_postmeta'][$postId][$key] ?? '';
     }
 }
 

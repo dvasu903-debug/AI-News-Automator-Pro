@@ -2,6 +2,15 @@
 /**
  * Publishing module's service provider.
  *
+ * CHANGE (Milestone 4, this package): added ContentGeneratorInterface/
+ * DraftSeoRepositoryInterface bindings, ResearchEditorialPolicy (bound
+ * as its own concrete class — the existing EditorialPolicyInterface
+ * binding is untouched, still DefaultEditorialPolicy), the three new
+ * generate/validate_content/post_process Actions, and the
+ * DraftGeneratedEvent/PublishingCompletedEvent this milestone
+ * introduces. See ADR-0019 for the trust-boundary and scope decisions
+ * behind this milestone.
+ *
  * CHANGE (Milestone 3, this package): added PublisherInterface/
  * EditorialPolicyInterface bindings, the four new publish/schedule/
  * unpublish/archive Actions (registered into Workflow's
@@ -27,6 +36,8 @@ declare(strict_types=1);
 
 namespace AINewsAutomator\Publishing;
 
+use AINewsAutomator\AI\Contracts\PromptTemplateRepositoryInterface;
+use AINewsAutomator\AI\Manager\AIManager;
 use AINewsAutomator\Core\AbstractServiceProvider;
 use AINewsAutomator\Core\Contracts\ActivatableInterface;
 use AINewsAutomator\Core\Contracts\ConfigRepositoryInterface;
@@ -35,24 +46,33 @@ use AINewsAutomator\Core\Contracts\EventDispatcherInterface;
 use AINewsAutomator\Core\Events\EventMetadataFactory;
 use AINewsAutomator\Core\RestApi\RestApiRegistry;
 use AINewsAutomator\Publishing\Actions\ArchiveAction;
+use AINewsAutomator\Publishing\Actions\GenerateAction;
+use AINewsAutomator\Publishing\Actions\PostProcessAction;
 use AINewsAutomator\Publishing\Actions\PublishDraftAction;
 use AINewsAutomator\Publishing\Actions\ScheduleDraftAction;
 use AINewsAutomator\Publishing\Actions\UnpublishAction;
+use AINewsAutomator\Publishing\Actions\ValidateContentAction;
 use AINewsAutomator\Publishing\Api\PublishingController;
 use AINewsAutomator\Publishing\Authorization\PublishingAbilityPolicy;
+use AINewsAutomator\Publishing\Contracts\ContentGeneratorInterface;
 use AINewsAutomator\Publishing\Contracts\DraftRepositoryInterface;
+use AINewsAutomator\Publishing\Contracts\DraftSeoRepositoryInterface;
 use AINewsAutomator\Publishing\Contracts\EditorialPolicyInterface;
 use AINewsAutomator\Publishing\Contracts\PublisherInterface;
 use AINewsAutomator\Publishing\Contracts\PublishingProfileRepositoryInterface;
 use AINewsAutomator\Publishing\Contracts\PublishingProfileValidatorInterface;
 use AINewsAutomator\Publishing\Health\PublishingHealthCheck;
 use AINewsAutomator\Publishing\Repositories\DraftRepository;
+use AINewsAutomator\Publishing\Repositories\DraftSeoRepository;
 use AINewsAutomator\Publishing\Repositories\PublishingProfileRepository;
+use AINewsAutomator\Publishing\Services\AiContentGenerator;
 use AINewsAutomator\Publishing\Services\DefaultEditorialPolicy;
 use AINewsAutomator\Publishing\Services\PublishingProfileService;
 use AINewsAutomator\Publishing\Services\PublishingService;
+use AINewsAutomator\Publishing\Services\ResearchEditorialPolicy;
 use AINewsAutomator\Publishing\Storage\PublishingMigrationManifest;
 use AINewsAutomator\Publishing\Validation\PublishingProfileValidator;
+use AINewsAutomator\Research\Contracts\SessionRepositoryInterface;
 use AINewsAutomator\Security\Rest\RestSecurityMiddleware;
 use AINewsAutomator\Storage\Contracts\ArticleRepositoryInterface;
 use AINewsAutomator\Storage\Contracts\ConnectionInterface;
@@ -105,6 +125,13 @@ final class PublishingServiceProvider extends AbstractServiceProvider implements
                 $c->get(PublishingProfileValidatorInterface::class)
             )
         );
+
+        $container->singleton(
+            DraftSeoRepositoryInterface::class,
+            static fn (ContainerInterface $c): DraftSeoRepositoryInterface => new DraftSeoRepository(
+                $c->get(ConnectionInterface::class)
+            )
+        );
     }
 
     private function registerPublishing(ContainerInterface $container): void
@@ -113,6 +140,26 @@ final class PublishingServiceProvider extends AbstractServiceProvider implements
             EditorialPolicyInterface::class,
             static fn (ContainerInterface $c): EditorialPolicyInterface => new DefaultEditorialPolicy(
                 $c->get(DraftRepositoryInterface::class)
+            )
+        );
+
+        // A second EditorialPolicyInterface implementation (approved
+        // Decision 5, ADR-0019) — bound as its own concrete-class entry,
+        // NOT swapping the binding above. ValidateContentAction is the
+        // one consumer that injects both.
+        $container->singleton(
+            ResearchEditorialPolicy::class,
+            static fn (ContainerInterface $c): ResearchEditorialPolicy => new ResearchEditorialPolicy(
+                $c->get(SessionRepositoryInterface::class)
+            )
+        );
+
+        $container->singleton(
+            ContentGeneratorInterface::class,
+            static fn (ContainerInterface $c): ContentGeneratorInterface => new AiContentGenerator(
+                $c->get(AIManager::class),
+                $c->get(PromptTemplateRepositoryInterface::class),
+                $c->get(ConfigRepositoryInterface::class)
             )
         );
 
@@ -159,6 +206,37 @@ final class PublishingServiceProvider extends AbstractServiceProvider implements
         $container->bind(
             ArchiveAction::class,
             static fn (ContainerInterface $c): ArchiveAction => new ArchiveAction($c->get(PublisherInterface::class))
+        );
+
+        $container->bind(
+            GenerateAction::class,
+            static fn (ContainerInterface $c): GenerateAction => new GenerateAction(
+                $c->get(ContentGeneratorInterface::class),
+                $c->get(SessionRepositoryInterface::class),
+                $c->get(DraftRepositoryInterface::class),
+                $c->get(EventDispatcherInterface::class),
+                $c->get(EventMetadataFactory::class)
+            )
+        );
+
+        $container->bind(
+            ValidateContentAction::class,
+            static fn (ContainerInterface $c): ValidateContentAction => new ValidateContentAction(
+                $c->get(EditorialPolicyInterface::class),
+                $c->get(ResearchEditorialPolicy::class),
+                $c->get(PublishingProfileRepositoryInterface::class),
+                $c->get(EventDispatcherInterface::class),
+                $c->get(EventMetadataFactory::class)
+            )
+        );
+
+        $container->bind(
+            PostProcessAction::class,
+            static fn (ContainerInterface $c): PostProcessAction => new PostProcessAction(
+                $c->get(DraftSeoRepositoryInterface::class),
+                $c->get(EventDispatcherInterface::class),
+                $c->get(EventMetadataFactory::class)
+            )
         );
     }
 
@@ -214,6 +292,9 @@ final class PublishingServiceProvider extends AbstractServiceProvider implements
         $registry->register($container->get(ScheduleDraftAction::class));
         $registry->register($container->get(UnpublishAction::class));
         $registry->register($container->get(ArchiveAction::class));
+        $registry->register($container->get(GenerateAction::class));
+        $registry->register($container->get(ValidateContentAction::class));
+        $registry->register($container->get(PostProcessAction::class));
 
         add_action('plugins_loaded', static function () use ($container): void {
             /** @var MigrationRunner $runner */
