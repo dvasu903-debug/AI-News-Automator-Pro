@@ -194,21 +194,23 @@ final class PublishingProfileRepository extends AbstractRepository implements Pu
 
             $now = $this->now()->format('Y-m-d H:i:s');
 
-            // Connection::update() only expresses exact-match WHERE
-            // clauses (no "!=" support), so the demote step looks up the
-            // current default by an explicit query first rather than
-            // attempting a single "is_default=1 AND id != X" UPDATE.
-            $currentDefault = $this->connection->newQuery($this->table())
-                ->where(Filter::equals('is_default', 1))
-                ->first();
-
-            if (null !== $currentDefault && (int) $currentDefault['id'] !== $profileId) {
-                $this->connection->update(
-                    $this->table(),
-                    ['is_default' => 0, 'updated_at' => $now],
-                    ['id' => (int) $currentDefault['id']]
-                );
-            }
+            // Demote is a single blanket exact-match UPDATE (is_default=1),
+            // NOT a read-then-targeted-demote. The previous SELECT-first
+            // variant was a race under concurrency (runtime checklist item
+            // D12): two simultaneous transactions could both snapshot-read
+            // the same stale "current default", each demote only that row,
+            // and each promote its own target — leaving two defaults. A
+            // blanket UPDATE takes row locks on every currently-default row,
+            // serializing concurrent markDefault() calls, and re-evaluates
+            // against committed data (current read) once a blocking
+            // transaction finishes. Demoting the target row itself when it
+            // is already default is harmless — the promote below restores it
+            // within the same transaction.
+            $this->connection->update(
+                $this->table(),
+                ['is_default' => 0, 'updated_at' => $now],
+                ['is_default' => 1]
+            );
 
             $this->connection->update(
                 $this->table(),
