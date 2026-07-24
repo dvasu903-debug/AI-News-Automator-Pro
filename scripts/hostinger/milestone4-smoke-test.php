@@ -1,12 +1,17 @@
 <?php
-
-declare(strict_types=1);
-
 /**
  * Module 8 Milestone 4 — Hostinger smoke test.
  *
  * Run from the plugin's site root via WP-CLI:
  *   wp eval-file scripts/hostinger/milestone4-smoke-test.php
+ *
+ * NOTE: deliberately no `declare(strict_types=1)` here — WP-CLI's
+ * `eval-file` command evaluates this file's content via PHP's eval(),
+ * which does not treat a leading `declare(strict_types=1)` as the
+ * file's first statement (it fatals: "strict_types declaration must be
+ * the very first statement in the script"). Every value in this script
+ * is already explicitly cast where it matters, so running without
+ * strict types is safe here.
  *
  * Scope (per the owner's explicit request — do NOT expand beyond this
  * without asking):
