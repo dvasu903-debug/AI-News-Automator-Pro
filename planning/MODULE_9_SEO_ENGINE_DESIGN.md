@@ -143,8 +143,29 @@ outbound network calls and needs no retry/backoff logic of its own.
 - `Seo\SeoServiceProvider` — the module's one service provider,
   following the exact `register()`/`boot()` split every prior module
   uses.
+- `Seo\Contracts\SeoProviderInterface` — the future-extensibility seam
+  the owner asked for (`supports()`/`provide()` — a vertical- or
+  integration-specific provider decides whether it applies to a post,
+  and returns the tag data if so). Exactly one implementation exists in
+  this module: `Seo\Services\DefaultSeoProvider`, bound directly to the
+  interface (no registry/discovery machinery, since there is only one
+  registered implementation today — mirrors `EditorialPolicyInterface`'s
+  own single-implementation starting state in Module 8 before
+  `ResearchEditorialPolicy` existed). Future providers
+  (`GoogleDiscoverSeoProvider`, `NewsSeoProvider`,
+  `WooCommerceSeoProvider`, named by the owner as examples) are **not**
+  built now — only the seam.
+- `Seo\Services\MetaTagBuilder` — the one place that assembles a post's
+  complete SEO tag data (canonical, robots, `og[]`, `twitter[]`,
+  `jsonld`) into a single `Seo\DTO\SeoTagData` value object. Pure data
+  transformation: reads `ana_draft_seo` + the `WP_Post` + an existing
+  featured image if any; performs no escaping and no echoing itself.
+  `DefaultSeoProvider` delegates to this class.
 - `Seo\Frontend\SeoHeadRenderer` — hooks `wp_head` (priority early
-  enough to run before most themes' own output). For a singular post
+  enough to run before most themes' own output), resolves
+  `SeoProviderInterface::provide($postId)`, and is the **only** class
+  in this module that echoes anything — every field is escaped at its
+  own output context right here (see Security). For a singular post
   view of a post with an `ana_draft_seo` row, renders, in order: a
   `<link rel="canonical">`, a `<meta name="robots">` (from
   `robots_directives`), Open Graph tags (`og:title`, `og:description`,
@@ -152,16 +173,22 @@ outbound network calls and needs no retry/backoff logic of its own.
   `og:site_name`), Twitter Card tags (`twitter:card`, `twitter:title`,
   `twitter:description`, `twitter:image`), and one `<script
   type="application/ld+json">` block (schema.org `NewsArticle`).
-  **No `ana_draft_seo` row → renders nothing** (a manually-created,
-  non-pipeline post is untouched — matches `ResearchEditorialPolicy`'s
-  own "no linked data, pass trivially" precedent from Milestone 4).
+  **No `ana_draft_seo` row → the provider returns null → renders
+  nothing** (a manually-created, non-pipeline post is untouched —
+  matches `ResearchEditorialPolicy`'s own "no linked data, pass
+  trivially" precedent from Milestone 4). Splitting tag-*construction*
+  (`MetaTagBuilder`, returns data) from tag-*rendering* (`SeoHeadRenderer`,
+  echoes escaped strings) makes the construction logic fully unit
+  -testable without any WordPress hook/output-buffer machinery.
 - `Seo\Services\SchemaOrgGenerator` — builds the JSON-LD array
   (`headline`, `datePublished`, `dateModified`, `author`, `publisher`,
   `mainEntityOfPage`) from the post + `ana_draft_seo` row. Pure data
-  transformation, no I/O beyond reading what's already loaded.
+  transformation, no I/O beyond reading what's already loaded. Called
+  by `MetaTagBuilder`, not directly by the renderer.
 - `Seo\Services\CanonicalUrlResolver` — wraps `get_permalink()`. See
   Open Question 2 for why this computes live rather than trusting the
-  stored `canonical_url` column for rendering.
+  stored `canonical_url` column for rendering. Called by
+  `MetaTagBuilder`.
 - `Seo\Services\InternalLinkSuggester` (+ `Contracts\InternalLinkSuggesterInterface`) —
   **admin-editor-only**, never on the public `wp_head` path (see
   Performance). Given a post's linked research session's
@@ -207,10 +234,13 @@ outbound network calls and needs no retry/backoff logic of its own.
 ```
 src/Seo/
 ├── Contracts/
+│   ├── SeoProviderInterface.php          # future-extensibility seam (owner-requested)
 │   └── InternalLinkSuggesterInterface.php
 ├── DTO/
-│   └── StructuredArticleData.php        # plain data → JSON-LD, no behavior
+│   └── SeoTagData.php                    # canonical, robots, og[], twitter[], jsonld — no behavior
 ├── Services/
+│   ├── DefaultSeoProvider.php            # implements SeoProviderInterface, delegates to MetaTagBuilder
+│   ├── MetaTagBuilder.php                # assembles SeoTagData; no escaping, no echoing
 │   ├── SchemaOrgGenerator.php
 │   ├── CanonicalUrlResolver.php
 │   ├── InternalLinkSuggester.php
@@ -231,22 +261,38 @@ exclusively through Publishing's already-frozen
 ```
 SeoServiceProvider
   registers:
+    SeoProviderInterface -> DefaultSeoProvider          # the extensibility seam
     InternalLinkSuggesterInterface -> InternalLinkSuggester
-    SchemaOrgGenerator, CanonicalUrlResolver, BreadcrumbGenerator, SeoHeadRenderer, SeoHealthCheck
+    MetaTagBuilder, SchemaOrgGenerator, CanonicalUrlResolver, BreadcrumbGenerator,
+    SeoHeadRenderer, SeoHealthCheck
   boot():
     add_action('wp_head', [SeoHeadRenderer, 'render'])
 
 SeoHeadRenderer
+  └── depends on → SeoProviderInterface (this module — resolves to DefaultSeoProvider today)
+      escapes every SeoTagData field at the point of echo — esc_url() /
+      esc_attr() / wp_json_encode() with JSON_UNESCAPED_SLASHES — never
+      trusts any upstream sanitization to already be output-context-safe.
+      Contains NO tag-construction logic of its own — purely a renderer.
+
+SeoProviderInterface (Contracts)
+  └── implemented by → DefaultSeoProvider
+        └── depends on → MetaTagBuilder (this module)
+      Future (not built now): GoogleDiscoverSeoProvider, NewsSeoProvider,
+      WooCommerceSeoProvider — each a second SeoProviderInterface
+      implementation, resolved the same way ResearchEditorialPolicy is a
+      second EditorialPolicyInterface implementation in Module 8.
+
+MetaTagBuilder
   ├── depends on → DraftSeoRepositoryInterface (Publishing, frozen)
   ├── depends on → SchemaOrgGenerator (this module)
   └── depends on → CanonicalUrlResolver (this module)
-      escapes every value at the point of echo — esc_url() / esc_attr() /
-      wp_json_encode() with JSON_UNESCAPED_SLASHES — never trusts any
-      upstream sanitization to already be output-context-safe.
+      returns SeoTagData|null; no escaping, no echoing, no WordPress hooks
+      — this is the class the escaping-regression unit tests target directly.
 
 SchemaOrgGenerator
   └── depends on → DraftSeoRepositoryInterface (Publishing, frozen)
-      returns plain array; SeoHeadRenderer is the only place it gets encoded.
+      returns plain array; only ever encoded by SeoHeadRenderer.
 
 InternalLinkSuggester implements InternalLinkSuggesterInterface
   ├── depends on → SessionRepositoryInterface (Research, frozen)   [Open Question 6]
@@ -263,11 +309,15 @@ BreadcrumbGenerator
 Public post request
   → WordPress core loads the post, fires wp_head
   → SeoHeadRenderer::render() (this module, new)
-      → DraftSeoRepositoryInterface::findByPostId($postId)   [Publishing, frozen — read only]
-          ├─ null  → render nothing, defer entirely to the theme/WordPress core
-          └─ found → CanonicalUrlResolver::resolve($postId)  (live get_permalink(), never the stored column)
-                    → SchemaOrgGenerator::generate($post, $seoRow) → array
-                    → echo, each field escaped at its own output context
+      → SeoProviderInterface::provide($postId)
+          → DefaultSeoProvider → MetaTagBuilder::build($postId)
+              → DraftSeoRepositoryInterface::findByPostId($postId)  [Publishing, frozen — read only]
+                  ├─ null  → MetaTagBuilder returns null
+                  └─ found → CanonicalUrlResolver::resolve($postId)  (live get_permalink())
+                            → SchemaOrgGenerator::generate($post, $seoRow) → array
+                            → assembled into one SeoTagData value object
+      ├─ null       → render nothing, defer entirely to the theme/WordPress core
+      └─ SeoTagData → echo, each field escaped at its own output context
 
 Admin editor screen (draft/post editing)
   → InternalLinkSuggester::suggestFor($postId)   [never touches wp_head]
@@ -336,8 +386,11 @@ Open Question 3) — Module 9's first milestone is read-only against
 
 - Unit tests (fakes, no WordPress integration — matches every prior
   module's PHPUnit convention): `SchemaOrgGeneratorTest`,
-  `CanonicalUrlResolverTest`, `InternalLinkSuggesterTest` (deterministic
-  ranking, asserts no AI dependency is even injected),
+  `CanonicalUrlResolverTest`, `MetaTagBuilderTest` (the primary target —
+  asserts the assembled `SeoTagData` shape for both a present and an
+  absent `ana_draft_seo` row), `DefaultSeoProviderTest` (thin —
+  delegates to `MetaTagBuilder`), `InternalLinkSuggesterTest`
+  (deterministic ranking, asserts no AI dependency is even injected),
   `BreadcrumbGeneratorTest`.
 - A dedicated **escaping-regression test class** for `SeoHeadRenderer`:
   seed `ana_draft_seo` with a deliberately hostile string (e.g. `"><script>alert(1)</script>` in `meta_title`, and a literal
@@ -345,7 +398,11 @@ Open Question 3) — Module 9's first milestone is read-only against
   it never appears unescaped in rendered output, in every context
   (HTML, attribute, JSON-LD). This is the same "prove the trust
   boundary holds, don't just reason about it" discipline
-  `AiContentGeneratorTest` established in Milestone 4.
+  `AiContentGeneratorTest` established in Milestone 4. Because
+  `MetaTagBuilder` returns plain data and `SeoHeadRenderer` only
+  renders it, this test exercises the real renderer against
+  `MetaTagBuilder`'s real output — not a mock of the escaping logic
+  itself.
 - No dedicated unit test for the `wp_head` hook registration itself or
   `SeoHealthCheck` — matches this codebase's own established, stated
   precedent (REST controllers and health checks have no dedicated unit
@@ -409,7 +466,23 @@ Open Question 3) — Module 9's first milestone is read-only against
 
 ---
 
-## Open questions for your approval
+## Decisions (approved by the owner, recorded here — implementation follows this document as amended)
+
+All six open questions below are **approved as recommended**, plus two
+additional refinements the owner requested before implementation:
+
+- **`MetaTagBuilder`** is introduced as its own service — `SeoHeadRenderer`
+  is responsible for rendering only, never tag construction. Reflected
+  above in Components/Class diagram/Data flow/Test strategy.
+- **`SeoProviderInterface`** is introduced now (empty of logic — one
+  method, one implementation) as the future-extensibility seam for
+  vertical/integration-specific SEO behavior (Google Discover, News SEO,
+  WooCommerce SEO — named as future examples, not built now). Only
+  `DefaultSeoProvider` is implemented in this module. Reflected above.
+- No other scope expansion. No changes to any frozen Module 1–8 file.
+
+The original open questions, kept below for the record of what was
+asked and approved:
 
 1. **Module numbering.** Confirm this becomes **Module 9** (a new,
    separate module — matching how `ARCHITECTURE_PLAN.md`,
