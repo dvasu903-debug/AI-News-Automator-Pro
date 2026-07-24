@@ -1,0 +1,34 @@
+{
+    "name": "yoursite/ai-news-automator-pro",
+    "description": "Enterprise-grade AI publishing pipeline for WordPress: source discovery, research, fact verification, AI writing, SEO, image processing, publishing, social sharing, and analytics.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=8.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "squizlabs/php_codesniffer": "^3.9",
+        "wp-coding-standards/wpcs": "^3.1",
+        "brain/monkey": "^2.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "AINewsAutomator\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AINewsAutomator\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "lint": "phpcs --standard=phpcs.xml.dist src/"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    }
+}

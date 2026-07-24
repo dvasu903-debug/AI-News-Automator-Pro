@@ -101,7 +101,18 @@ final class WorkflowServiceProvider extends AbstractServiceProvider implements A
 
     private function registerRunner(ContainerInterface $container): void
     {
-        $container->bind(
+        // Singleton, not bind(): populateActionRegistry() (called once,
+        // during boot()) registers every action into ONE instance of this
+        // registry. WorkflowRunner later autowires ActionRegistryInterface
+        // as a constructor dependency — with bind() (a fresh instance per
+        // resolution), it would receive a completely different, empty
+        // registry, and every action type would appear unregistered at
+        // runtime despite registration having "succeeded" at boot. Unit
+        // tests never caught this: they construct WorkflowRunner directly
+        // with a manually-built registry, bypassing the container's
+        // binding behavior entirely — this was only ever reachable through
+        // real, full-container runtime execution.
+        $container->singleton(
             ActionRegistryInterface::class,
             static fn (): ActionRegistryInterface => new ActionRegistry()
         );
