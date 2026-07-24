@@ -14,7 +14,48 @@ Automator Pro), Vertical (News).
 | 5 | Source Connectors | Frozen |
 | 6 | Research Engine | Frozen |
 | 7 | Workflow Engine | Frozen — 2026-07-21 |
-| 8 | Publishing Engine | **Milestone 3 frozen — 2026-07-23** (Milestone 4 next) |
+| 8 | Publishing Engine | **Milestone 4 frozen — 2026-07-24** (Milestone 5 scope not yet defined) |
+
+## Module 8 — Milestone 4 (AI-generation pipeline) freeze record
+
+**Status: MILESTONE 4 FROZEN — 2026-07-24.** Module 8 as a whole remains
+in progress; Milestone 5 (if any) has no defined scope yet anywhere in
+this project's design docs or ADRs.
+
+Milestone 4 adds the AI-generation pipeline ADR-0018 explicitly
+deferred: `GenerateAction` (turns a completed research session's
+`ResearchSummary` into a sanitized, persisted draft via `AIManager` +
+a new `AiContentGenerator`), `ValidateContentAction` (merges the frozen
+`DefaultEditorialPolicy` with a new second `EditorialPolicyInterface`
+implementation, `ResearchEditorialPolicy`, checking citation count/
+confidence/contradictions), and `PostProcessAction` (deterministic SEO
+metadata into the previously-unused `ana_draft_seo` table from
+Milestone 1). See ADR-0019 for the full trust-boundary design: where
+`wp_kses_post()`/`esc_html()` sanitize AI-generated content and
+deterministic citations respectively, and how `AIException`'s
+retryability classification bridges into `WorkflowStepException` so
+`WorkflowStepRetryExecutor` actually retries transient provider
+failures.
+
+Full local pipeline (`php -l`, PHPUnit — 557 tests/1 documented
+incomplete, PHPCS clean on every new file) and two independent runtime
+passes both passed: a local real-database harness (MariaDB +
+WordPress 6.8.3 `wpdb`/`dbDelta` via the production boot path)
+exercising the complete `GenerateAction → ValidateContentAction →
+PostProcessAction` pipeline against a real `AIManager` (network call
+faked, all orchestration real) and confirming the citation-escaping
+trust boundary holds at runtime; and a live Hostinger smoke test on the
+actual deployed artifact, also passing. One real defect was found and
+fixed during the Hostinger pass — `wp eval-file` is incompatible with a
+leading `declare(strict_types=1)` (fataled via PHP's `eval()`
+semantics) — scoped entirely to the smoke-test script itself, not any
+`src/` file. Evidence trail:
+`docs/verification/2026-07-23-module-8-milestone-4-runtime-verification.md`.
+
+Process improvement adopted this milestone: `./scripts/verify-runtime.sh full`
+now runs every milestone checklist in order, stopping at the first
+failure — the regression-suite entry point for the growing checklist
+set as the project scales toward later modules.
 
 ## Module 8 — Milestone 3 (PublishingService / Validator / Scheduler) freeze record
 
@@ -116,15 +157,16 @@ catchable by the unit test suite's fake-DB harness:
 for every future module): validation report, `authorized-frozen-changes.txt`,
 `CHANGELOG.md`, `RELEASE_NOTES.md`.
 
-## Module 8 — Milestone 4 (next)
+## Module 8 — Milestone 5 (next, scope undefined)
 
-Milestone 4 (the AI-generation pipeline: `GenerateAction` consuming
-`AIManager` + `Research\DTO\ResearchSummary`, AI-backed content
-validation extending `EditorialPolicyInterface`, and `PostProcessAction`)
-begins now that Milestone 3 is frozen, per
-`MODULE_8_PUBLISHING_ENGINE_DESIGN.md`'s incremental delivery plan,
-ADR-0018's explicit deferral, and the project's standing
-audit-before-code discipline.
+No further Module 8 milestone is named or scoped anywhere in
+`MODULE_8_PUBLISHING_ENGINE_DESIGN.md`, ADR-0018, or ADR-0019 — unlike
+the Milestone 3 → 4 handoff, where ADR-0018 explicitly named and
+deferred the AI-generation pipeline. Per this project's standing
+audit-before-code discipline, the next unit of work (whether a further
+Module 8 milestone or a new module entirely) should be scoped from an
+explicit source (a design doc, an owner instruction, or an updated
+checklist) before any code is written, not assumed from precedent.
 
 ## Guiding principles (unchanged since Module 1)
 

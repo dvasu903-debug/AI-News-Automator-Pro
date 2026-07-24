@@ -1,5 +1,81 @@
 # Release Notes
 
+## 2.0.0-dev — Module 8 Milestone 4 (AI-generation pipeline) frozen
+
+**Date:** 2026-07-24
+
+### What's new
+
+Milestone 4 adds the AI-generation pipeline ADR-0018 explicitly
+deferred, on top of Milestone 3's publish/schedule/unpublish/archive
+operations: `GenerateAction` turns a completed research session's
+`ResearchSummary` into a sanitized, persisted draft via a new
+`AiContentGenerator` (backed by `AIManager`); `ValidateContentAction`
+merges the frozen `DefaultEditorialPolicy` with a new second
+`EditorialPolicyInterface` implementation, `ResearchEditorialPolicy`
+(citation count, confidence, contradiction checks); and
+`PostProcessAction` derives SEO metadata deterministically and
+persists it via a new `DraftSeoRepository` into the previously-unused
+`ana_draft_seo` table. See `docs/adr/0019-*.md` for the full
+trust-boundary design — where AI-generated content is sanitized
+(`wp_kses_post()`), how deterministic citations are escaped
+(`esc_html()`) before being appended, and how a provider's
+retryability classification is bridged into the Workflow engine's own
+retry mechanism so a transient failure (rate limit, provider outage)
+is actually retried instead of failing outright.
+
+### Fixed
+
+`scripts/hostinger/milestone4-smoke-test.php` fataled under `wp
+eval-file` due to a `declare(strict_types=1)`/`eval()` incompatibility
+in WP-CLI itself — found and fixed during the live Hostinger pass,
+scoped entirely to that smoke-test script (no `src/` file affected).
+
+### Validated
+
+Full local pipeline (`php -l`, PHPUnit — 557 tests, 1 documented
+incomplete — PHPCS clean on every new/changed file) plus two
+independent runtime passes: a local real-database harness (MariaDB
+10.11 + WordPress 6.8.3 `wpdb`/`dbDelta` via the production boot path)
+exercising the complete three-action pipeline end-to-end against a
+real `AIManager` (only the network call faked) — including an explicit,
+executed proof that the citation-escaping trust boundary holds at
+runtime (a deliberately markup-bearing citation appeared in the
+persisted post only in its escaped form) — and a live Hostinger smoke
+test on the actual deployed artifact, confirming plugin boot, action
+resolution/registration, event dispatch, and `ana_draft_seo`
+persistence against real production MySQL. Full report:
+`docs/verification/2026-07-23-module-8-milestone-4-runtime-verification.md`.
+
+Process improvement adopted this milestone: `./scripts/verify-runtime.sh full`
+runs every milestone checklist in order, stopping at the first
+failure — the regression-suite entry point for the growing checklist
+set.
+
+### Known, documented, non-blocking findings
+
+- No real AI provider call was exercised anywhere (by design — a live
+  call is optional and cost-gated per the site owner's instruction).
+  The real orchestration layer around that call was fully exercised on
+  both environments; only the actual HTTP request/response to a real
+  vendor was not.
+- `EditorialPolicyInterface`'s citation-count/confidence checks are now
+  implemented but only apply to drafts with a linked research session —
+  a manually-created draft still passes trivially (no research to
+  validate against), consistent with ADR-0018's original scope note.
+- `PostProcessAction`'s `canonical_url` is left `null` this milestone
+  (no permalink source integrated yet) — a documented, deliberate scope
+  limit, not a defect.
+
+### Compatibility
+
+No breaking changes to Modules 1–7 or Module 8 Milestones 1–3. No
+changes to any frozen module — `EditorialPolicyInterface`,
+`DefaultEditorialPolicy`, and `EditorialPolicyResult` are all untouched;
+`ResearchEditorialPolicy` is bound as its own concrete-class container
+entry alongside the existing `EditorialPolicyInterface` binding, not a
+replacement of it.
+
 ## 2.0.0-dev — Module 8 Milestone 3 (PublishingService / Validator / Scheduler) frozen
 
 **Date:** 2026-07-23

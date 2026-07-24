@@ -1,32 +1,36 @@
-# Module 8 (Publishing Engine) — Milestone 4 Runtime Verification
+# Module 8 (Publishing Engine) — Milestone 4 Runtime Verification & Freeze Report
 
-Date: 2026-07-23
+Date: 2026-07-23 – 2026-07-24
 Baseline: Milestone 3 frozen (`2026-07-23-module-8-milestone-3-runtime-verification.md`)
 + Milestone 4 implementation (`GenerateAction`, `ValidateContentAction`,
 `PostProcessAction`, `AiContentGenerator`, `ResearchEditorialPolicy`,
 `DraftSeoRepository` — see ADR-0019).
 
-## Runtime environment — read this first
+## Runtime environment
 
-**This session has no SSH or hosting credentials for Hostinger**
-(`tfgadgets.com`) — the same situation the Milestone 2 runtime
-verification session documented. The checklist below was executed
-against a locally provisioned real-database runtime instead:
+Two environments were used, for two different purposes — same pattern
+as Milestones 2 and 3:
 
-| Component | Version / detail |
+| Purpose | Environment |
 |---|---|
-| Database | MariaDB 10.11.14 (InnoDB, utf8mb4) — real server, not a fake |
-| wpdb | WordPress 6.8.3 `class-wpdb.php`, verbatim, unmodified |
-| dbDelta | WordPress 6.8.3 `wp-admin/includes/upgrade.php`, extracted verbatim |
-| PHP | 8.4.19 CLI |
-| Plugin boot | The REAL production entry point: `ai-news-automator-pro.php` → `PluginFactory::create()->boot()` on `plugins_loaded`, all 8 module providers |
-| AI provider | Real `AIManager` orchestration (validation, caching, rate limiting, retry/failover, cost calculation, event dispatch, request/metrics recording) against AI module's own `FakeChatProvider` test double, registered into the real `ProviderRegistryInterface` the same way `AIServiceProvider` registers its real providers — **only the network call is faked**; no real AI provider call was made (no API key configured, no cost incurred) |
-| Shimmed | Only peripheral WP APIs (hooks, options, transients, i18n, escaping, `wp_kses_post()`, minimal post/REST/capability stubs) |
+| Full checklist (action registration, `AIManager` orchestration, trust boundary, policy merging, `priorOutput()`, SEO persistence) | Locally-provisioned MariaDB 10.11.14 (InnoDB, utf8mb4) + verbatim WordPress 6.8.3 `wpdb`/`dbDelta`, PHP 8.4.19 CLI, plugin booted through its real production entry point (`ai-news-automator-pro.php` → `PluginFactory::create()->boot()`) |
+| Hostinger smoke test (this report's subject) | **tfgadgets.com on Hostinger** — PHP 8.3.30, WP-CLI 2.12.0, real production MySQL/MariaDB, the plugin's actual deployed code at commit `599582b` |
 
-Run via the project's committed automation:
-`COMPOSER_ALLOW_SUPERUSER=1 ./scripts/verify-runtime.sh milestone2 milestone3 milestone4`
-— this also re-ran Milestone 2 and 3's checklists as regression checks;
-both still pass unchanged.
+Local pass run via the project's committed automation:
+`COMPOSER_ALLOW_SUPERUSER=1 ./scripts/verify-runtime.sh full` (the new
+fail-fast, ordered `milestone2 → milestone3 → milestone4` sequence added
+this milestone — see "Process improvement" below) — Milestone 2 and 3's
+checklists re-ran as regressions and both still pass unchanged.
+
+In both environments, the AI provider call is a test double: real
+`AIManager` orchestration (validation, caching, rate limiting, retry/
+failover, cost calculation, event dispatch, request/metrics recording)
+runs against a fake `ChatProviderInterface` registered into the real
+`ProviderRegistryInterface` the same way `AIServiceProvider` registers
+its real providers — **only the network call is faked**; no real AI
+provider call was made anywhere in this milestone's verification (no
+API key configured, no cost incurred), per the owner's explicit
+instruction that a live call is optional and cost-gated.
 
 ## Static verification (all new/changed Milestone 4 files)
 
@@ -112,63 +116,103 @@ runtime code existed to test — see ADR-0019's "Alternatives Considered"
 section for what each of those would have looked like if shipped
 uncorrected.
 
-## Hostinger smoke test — NOT performed in this session, decision needed
+## Hostinger smoke test — performed, passed
 
-Per the standing instruction ("Hostinger smoke tests where
-applicable"), this milestone's smoke test has an additional wrinkle
-Milestones 2-3 didn't: `GenerateAction` calling a **real** AI provider
-on the live site would cost real money and requires a real API key
-configured there. Combined with this session's lack of Hostinger
-credentials at all, there are three ways to close this out, and the
-choice is the site owner's, not this session's to make:
+Run by the site owner (this session has no Hostinger credentials) via
+`scripts/hostinger/milestone4-smoke-test.php`, a self-contained WP-CLI
+`eval-file` script scoped exactly to the owner's requested checklist —
+no live AI provider call (an inline fake `ChatProviderInterface`
+exercises the full orchestration path instead, since the dev-only
+`tests/AI/Fakes/FakeChatProvider` fixture isn't present under this
+deployment's `composer install --no-dev`):
 
-1. **Grant this (or a future) session Hostinger SSH/WP-CLI access** and
-   run the smoke test — scoped to the non-AI-cost parts only (action
-   registration, `ValidateContentAction`/`PostProcessAction` against a
-   manually-created draft with a stubbed/pre-seeded research session,
-   mirroring what the local harness already proved) unless a real API
-   key and the associated cost are explicitly acceptable for a live
-   generation call too.
-2. **Run the smoke test independently** (the owner has done this for
-   Milestones 2-3 in past sessions) and report back the result for the
-   freeze report.
-3. **Waive the Hostinger smoke test explicitly for this milestone**,
-   freezing on the strength of the local real-database verification
-   alone — precedented by Milestone 2's own runtime-verification report,
-   which held freeze conditionally until the owner separately confirmed
-   the Hostinger pass.
+```
+[PASS] 1: plugin boots and container is available
+[PASS] 2: all three actions resolve from the container
+[PASS] 3: "publishing.generate" registered
+[PASS] 3: "publishing.validate_content" registered
+[PASS] 3: "publishing.post_process" registered
+[PASS] 4: DraftGeneratedEvent listener invoked
+[PASS] 5a: GenerateAction succeeds against real production stack
+[PASS] 5b: draft post created
+[PASS] 5c: wp_kses_post()/esc_html() trust boundary holds (script stripped, citation escaped)
+[PASS] 5d: ValidateContentAction succeeds
+[PASS] 5e: PostProcessAction succeeds
+[PASS] 6a: ana_draft_seo row persisted against real MySQL
+[PASS] 6b: meta_title derived and non-empty
+[PASS] 6c: robots_directives default applied
+
+MILESTONE 4 HOSTINGER SMOKE TEST PASSED
+```
+
+All test data (draft post, publishing profile, research session/claim/
+citation, prompt template version, `ana_draft_seo` row) and the
+temporary `ai.defaults.chat` config override were deleted/restored by
+the script's own cleanup, confirmed in its output ("Test data cleaned
+up: 1 post(s), 1 profile(s), research session ..., prompt template
+version ..."). The live site itself was confirmed serving HTTP 200
+throughout (`curl -sI https://tfgadgets.com/`), and `wp cli info`
+confirmed WP-CLI's PHP binary/version (8.3.30) matched the site's own.
+
+**One real defect found and fixed during this pass:** the smoke test
+script fataled on first attempt — `wp eval-file` runs the target file's
+content through PHP's `eval()`, which does not accept a leading
+`declare(strict_types=1)` as the file's true first statement ("strict_types
+declaration must be the very first statement in the script"). This is a
+`wp eval-file`-specific incompatibility, not a defect in the actions/
+services under test. Fixed by removing `declare(strict_types=1)` from
+the smoke test script (every value in it is already explicitly cast, so
+no behavior depends on strict typing); re-verified by simulating
+`eval-file`'s actual `eval()`-based mechanics locally before asking the
+site owner to re-run, then confirmed passing on the real Hostinger
+stack. This defect is scoped entirely to the smoke-test script itself —
+none of Milestone 4's `src/` files use `wp eval-file` or are affected.
 
 ## Remaining known limitations
 
-1. **Not executed on Hostinger** — see above; this is the residual gap
-   blocking an unconditional freeze recommendation, not a logic-level
-   defect. The checklist logic itself has passed end-to-end against a
-   real InnoDB database and real wpdb/dbDelta.
-2. No real AI provider call was exercised anywhere in this pass (by
-   design — see "AI provider" row above). The real orchestration layer
-   around that call (`AIManager`'s validation/caching/rate-limiting/
-   retry/failover/cost-recording/event-dispatch) was fully exercised;
-   only the actual HTTP request/response to a real vendor was not.
-3. `EditorialPolicyInterface`'s citation-count/confidence checks are
+1. No real AI provider call was exercised anywhere in this milestone's
+   verification (by design, per the owner's instruction — a live call
+   is optional and cost-gated). The real orchestration layer around
+   that call (`AIManager`'s validation/caching/rate-limiting/retry/
+   failover/cost-recording/event-dispatch) was fully exercised on both
+   the local harness and the live Hostinger stack; only the actual
+   HTTP request/response to a real vendor was not.
+2. `EditorialPolicyInterface`'s citation-count/confidence checks are
    now implemented (`ResearchEditorialPolicy`) but only for drafts with
    a linked research session — the gap ADR-0018 documented for
    manually-created drafts is unchanged and expected (no research to
    validate against).
-4. `PostProcessAction`'s `canonical_url` is left `null` this milestone
+3. `PostProcessAction`'s `canonical_url` is left `null` this milestone
    (no permalink source integrated) — a documented, deliberate scope
    limit (ADR-0019 decision 6), not a defect.
-5. Pre-existing PHPCS findings in frozen modules remain untouched, per
+4. Pre-existing PHPCS findings in frozen modules remain untouched, per
    established project policy.
+
+## Process improvement: `verify-runtime.sh full`
+
+Per the owner's suggestion after this milestone's local pass:
+`./scripts/verify-runtime.sh full` now runs every milestone checklist
+(`milestone2 → milestone3 → milestone4`, via an explicit, ordered
+`FULL_SEQUENCE` list in the script) sequentially, **stopping at the
+first failure** rather than continuing on to later ones — the existing
+no-args mode (run everything, report all failures) and explicit-name
+mode are both unchanged. This is the regression-suite entry point for
+the growing checklist set; future milestones append their checklist
+name to `FULL_SEQUENCE`. Verified by running the new mode end-to-end
+against real MariaDB.
 
 ## Recommendation
 
-**Freeze is recommended, conditional on the Hostinger decision above.**
-Every locally-verifiable checklist item has passed with real,
-reproducible, assertion-backed evidence against a real database and the
-real production boot path, including the two design-phase-caught issues
-(citation escaping, retry classification) now proven correct at
-runtime rather than merely reasoned about. No runtime-phase defects
-were found. The one open item is the Hostinger smoke test's scope and
-access, which needs an explicit owner decision (see options 1-3 above)
-before this milestone can be marked frozen — the same gate Milestone 2
-was held to.
+**Milestone 4 is frozen as of this report.** Every checklist item has
+passed with real, reproducible, assertion-backed evidence — a local
+real-database harness covering all six required areas plus the ADR-0019
+trust boundary, and a live Hostinger smoke test on the actual deployed
+artifact — including the two design-phase-caught issues (citation
+escaping, retry classification) now proven correct at runtime rather
+than merely reasoned about, and the one genuine defect this pass found
+(the `wp eval-file`/`strict_types` incompatibility), fixed and
+re-verified before the Hostinger pass was reattempted. Module 8
+Milestone 5 (or the next planned module) may begin; its scope is not
+yet defined anywhere in this project's design docs or ADRs and should
+be scoped following the same audit-before-code discipline as every
+prior milestone, not assumed.

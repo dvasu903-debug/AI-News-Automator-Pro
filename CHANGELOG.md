@@ -6,6 +6,32 @@ project is pre-release; entries below cover the 2.0.0-dev line.
 ## [Unreleased — 2.0.0-dev]
 
 ### Added
+- **Publishing (Module 8, Milestone 4):** The AI-generation pipeline
+  ADR-0018 deferred. `Publishing\Services\AiContentGenerator`
+  (`ContentGeneratorInterface`) turns a completed research session's
+  `ResearchSummary` into sanitized draft content via `AIManager` — the
+  AI only ever sees claim statements, never citation text; the
+  generated body is sanitized with `wp_kses_post()` before any caller
+  sees it, and deterministic citations are appended afterward with
+  `esc_html()` around each one. `GenerateAction` (new Workflow action)
+  creates the draft directly; on an `AIException` or
+  `ContentGenerationException` it rethrows a classified
+  `WorkflowStepException` so `WorkflowStepRetryExecutor` actually
+  retries a transient provider failure (rate limit/outage) instead of
+  losing that classification. `Publishing\Services\ResearchEditorialPolicy`
+  is a second `EditorialPolicyInterface` implementation (not a new
+  interface, not a swap of the existing `DefaultEditorialPolicy`
+  binding) checking citation count/confidence/contradictions from the
+  linked research session; `ValidateContentAction` merges its
+  violations with the existing policy's. `PostProcessAction` derives
+  SEO metadata (meta title/description, a heuristic focus keyword,
+  default robots directives) via strictly deterministic string
+  manipulation — never a second AI call — and persists it through the
+  new `DraftSeoRepository` into the previously-unused `ana_draft_seo`
+  table from Milestone 1. Two new events (`DraftGeneratedEvent`,
+  `PublishingCompletedEvent`); `ValidateContentAction`/`PostProcessAction`
+  are the first real use of `WorkflowRunContext::priorOutput()`. See
+  ADR-0019 for the full trust-boundary and scope reasoning.
 - **Publishing (Module 8, Milestone 3):** `PublisherInterface`/
   `PublishingService` (publish/schedule/unpublish/archive —
   `publish()` reuses the frozen `ArticleRepositoryInterface::approve()`
@@ -34,6 +60,14 @@ project is pre-release; entries below cover the 2.0.0-dev line.
   repository, validator, and service.
 
 ### Fixed
+- **Publishing (Module 8, Milestone 4):** the Hostinger smoke test
+  script (`scripts/hostinger/milestone4-smoke-test.php`) fataled under
+  `wp eval-file`, which evaluates the target file's content via PHP's
+  `eval()` — this does not accept a leading `declare(strict_types=1)`
+  as the file's true first statement. Fixed by removing it from the
+  smoke-test script (every value in it is already explicitly cast, so
+  no behavior depended on strict typing). Scoped entirely to that
+  script; no `src/` file uses `wp eval-file` or is affected.
 - **Publishing (Module 8, Milestone 2):** `PublishingProfileRepository::markDefault()`
   read the current default via an unlocked `SELECT` and demoted only
   that row — under concurrent `markDefault()` calls, two transactions
@@ -101,3 +135,14 @@ project is pre-release; entries below cover the 2.0.0-dev line.
   Hostinger smoke test on the deployed artifact — both passed with no
   defects found; see
   docs/verification/2026-07-23-module-8-milestone-3-runtime-verification.md.
+- Module 8 Milestone 4 (AI-generation pipeline) full local pipeline
+  (557 tests, 1 documented incomplete, PHPCS clean on every new file)
+  and two independent runtime passes — a local real-database harness
+  exercising `GenerateAction → ValidateContentAction → PostProcessAction`
+  end-to-end against a real `AIManager` (network call faked) and
+  confirming the ADR-0019 citation-escaping trust boundary holds at
+  runtime, and a live Hostinger smoke test on the deployed artifact —
+  both passed. One defect found and fixed: `wp eval-file`'s
+  incompatibility with `declare(strict_types=1)`, scoped to the
+  smoke-test script only; see
+  docs/verification/2026-07-23-module-8-milestone-4-runtime-verification.md.
