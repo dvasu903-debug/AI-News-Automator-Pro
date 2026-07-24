@@ -19,13 +19,22 @@
 #
 # Usage (from the plugin root, same directory as composer.json):
 #   chmod +x scripts/verify-runtime.sh
-#   ./scripts/verify-runtime.sh [checklist-name ...]
+#   ./scripts/verify-runtime.sh [checklist-name ... | full]
 #
 # With no arguments, runs the generic boot-check plus every checklist in
-# scripts/runtime-harness/checklists/. Pass one or more checklist names
-# (matching a filename in that directory, without .php) to run only
-# those, e.g.:
+# scripts/runtime-harness/checklists/, continuing past any individual
+# failure so the full report is visible in one run. Pass one or more
+# checklist names (matching a filename in that directory, without .php)
+# to run only those, e.g.:
 #   ./scripts/verify-runtime.sh milestone3
+#
+# Pass the single literal argument "full" to run every milestone
+# checklist registered in FULL_SEQUENCE below, IN ORDER, STOPPING at the
+# first failure (rather than continuing on to later milestones) — the
+# regression-suite mode for a growing project: once there are a dozen-
+# plus milestone checklists, finding out #3 is broken shouldn't require
+# waiting for #4 through #20 to also run.
+#   ./scripts/verify-runtime.sh full
 #
 # Requires: PHP 8.2+, Composer, and either a MariaDB/MySQL server already
 # reachable at ANA_HARNESS_DB_HOST (default "localhost", i.e. the local
@@ -166,7 +175,27 @@ run_checklist() {
 
 run_checklist "boot-check" "$HARNESS_DIR/boot-check.php"
 
-if [ "$#" -gt 0 ]; then
+# The ordered regression sequence for "full" mode. Append each new
+# milestone's checklist name here as it's added — this list is the one
+# place that defines "the full suite, in order" for fail-fast runs.
+FULL_SEQUENCE=(milestone2 milestone3 milestone4)
+
+if [ "$#" -eq 1 ] && [ "$1" = "full" ]; then
+    for name in "${FULL_SEQUENCE[@]}"; do
+        path="$HARNESS_DIR/checklists/$name.php"
+        if [ ! -f "$path" ]; then
+            echo "FAIL: no checklist named '$name' at $path (FULL_SEQUENCE is out of date)"
+            FAIL=1
+            break
+        fi
+        run_checklist "$name" "$path"
+        if [ $? -ne 0 ]; then
+            echo
+            echo "Stopping 'full' sequence: '$name' failed — fix it before checking later milestones."
+            break
+        fi
+    done
+elif [ "$#" -gt 0 ]; then
     for name in "$@"; do
         path="$HARNESS_DIR/checklists/$name.php"
         [ -f "$path" ] && run_checklist "$name" "$path" || { echo "FAIL: no checklist named '$name' at $path"; FAIL=1; }

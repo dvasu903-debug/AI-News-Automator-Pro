@@ -51,7 +51,13 @@ into git.
 3. Run just it via `./scripts/verify-runtime.sh <name>`, or leave it to
    run automatically with everything else via `./scripts/verify-runtime.sh`
    (no arguments).
-4. Reference the resulting pass in that milestone's
+4. Append its name to `FULL_SEQUENCE` in `verify-runtime.sh` — the
+   ordered list `./scripts/verify-runtime.sh full` runs, stopping at the
+   first failure rather than continuing on to later milestones. This is
+   the regression-suite entry point for a growing project: once there
+   are a dozen-plus checklists, finding out an early one broke shouldn't
+   require waiting for every later one to also run.
+5. Reference the resulting pass in that milestone's
    `docs/verification/*-runtime-verification.md` report.
 
 ## What this does NOT replace
