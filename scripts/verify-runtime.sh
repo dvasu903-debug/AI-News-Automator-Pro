@@ -178,7 +178,7 @@ run_checklist "boot-check" "$HARNESS_DIR/boot-check.php"
 # The ordered regression sequence for "full" mode. Append each new
 # milestone's checklist name here as it's added — this list is the one
 # place that defines "the full suite, in order" for fail-fast runs.
-FULL_SEQUENCE=(milestone2 milestone3 milestone4)
+FULL_SEQUENCE=(milestone2 milestone3 milestone4 module9)
 
 if [ "$#" -eq 1 ] && [ "$1" = "full" ]; then
     for name in "${FULL_SEQUENCE[@]}"; do

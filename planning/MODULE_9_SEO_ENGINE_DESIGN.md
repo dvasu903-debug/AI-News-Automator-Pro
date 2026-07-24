@@ -420,12 +420,19 @@ Open Question 3) — Module 9's first milestone is read-only against
 - New `scripts/runtime-harness/checklists/module9.php` (naming to match
   the existing `milestone2/3/4` convention — see Open Question 5 on
   whether this is "Module 9" or a Publishing milestone) verifying, all
-  execution-first against real MariaDB + real WordPress core: a real
-  `ana_draft_seo` row renders correct canonical/OG/JSON-LD; a post with
-  no `ana_draft_seo` row renders nothing; the hostile-string regression
-  case holds against real `wp_kses_post()`/escaping functions (not the
-  harness's own simplified stand-ins — the real WordPress core
-  functions this harness already fetches verbatim).
+  execution-first against real MariaDB + real WordPress core wpdb/dbDelta
+  and the real production boot path: a real `ana_draft_seo` row (via
+  the real, frozen `DraftSeoRepositoryInterface`) renders correct
+  canonical/OG/JSON-LD; a post with no `ana_draft_seo` row renders
+  nothing; the hostile-string regression case holds against the actual
+  `SeoHeadRenderer`/`MetaTagBuilder`/`SchemaOrgGenerator` code paths
+  running end-to-end through the real, booted container — the same
+  discipline as every other checklist in this harness (only `wpdb`/
+  `dbDelta` are fetched-verbatim WordPress core; the peripheral escaping
+  functions are this harness's own shims, same as in unit tests — the
+  proof this checklist adds is that the module's *own* code paths
+  produce correct output end-to-end, not a claim about testing
+  WordPress core's escaping implementation itself).
 - Append the new checklist name to `verify-runtime.sh`'s
   `FULL_SEQUENCE` list (the process improvement just adopted in
   Milestone 4) so it becomes a permanent regression check going
