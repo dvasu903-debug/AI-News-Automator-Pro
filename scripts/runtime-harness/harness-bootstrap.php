@@ -559,7 +559,15 @@ function wp_strip_all_tags(string $text): string
 
 function get_permalink(int $postId): string|false
 {
-    return $GLOBALS['__permalinks'][$postId] ?? false;
+    if (isset($GLOBALS['__permalinks'][$postId])) {
+        return $GLOBALS['__permalinks'][$postId];
+    }
+
+    // Matches real WordPress's own behavior: get_permalink() returns
+    // SOME URL for any existing post (the ?p=123 fallback when no
+    // pretty-permalink structure is configured), never false, unless
+    // the post itself doesn't exist.
+    return isset($GLOBALS['__posts'][$postId]) ? 'https://harness.test/?p=' . $postId : false;
 }
 
 function get_the_post_thumbnail_url(int $postId, string $size = 'post-thumbnail'): string|false
