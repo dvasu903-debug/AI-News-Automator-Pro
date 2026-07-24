@@ -271,8 +271,8 @@ SeoServiceProvider
 SeoHeadRenderer
   └── depends on → SeoProviderInterface (this module — resolves to DefaultSeoProvider today)
       escapes every SeoTagData field at the point of echo — esc_url() /
-      esc_attr() / wp_json_encode() with JSON_UNESCAPED_SLASHES — never
-      trusts any upstream sanitization to already be output-context-safe.
+      esc_attr() / wp_json_encode(..., JSON_HEX_TAG | JSON_HEX_AMP) —
+      never trusts any upstream sanitization to already be output-context-safe.
       Contains NO tag-construction logic of its own — purely a renderer.
 
 SeoProviderInterface (Contracts)
@@ -336,13 +336,16 @@ Open Question 3) — Module 9's first milestone is read-only against
   Every value echoed by `SeoHeadRenderer` must be escaped for its exact
   output context: `esc_url()` for `og:url`/canonical/image URLs,
   `esc_attr()` for any attribute value, and `wp_json_encode(...,
-  JSON_UNESCAPED_SLASHES)` for the JSON-LD block (never `esc_html()`
-  on JSON — that double-encodes and breaks the payload; the real risk
-  in a JSON-LD `<script>` block is a literal `</script>` substring
-  inside a string value breaking out of the tag, which `JSON_UNESCAPED_SLASHES`
-  must NOT be combined with unless the closing-tag substring is
-  separately guarded — this exact interaction is a required unit-test
-  case, not an assumption).
+  JSON_HEX_TAG | JSON_HEX_AMP)` for the JSON-LD block (never
+  `esc_html()` on JSON — that double-encodes and breaks the payload).
+  The real risk in a JSON-LD `<script>` block is a literal `</script>`
+  substring inside a string value breaking out of the tag —
+  `JSON_HEX_TAG` converts every `<`/`>` to a `\u` escape, which
+  eliminates that risk regardless of what a title/description string
+  contains (a more robust guarantee than relying on slash-escaping
+  alone); `JSON_HEX_AMP` additionally neutralizes `&`-based entity
+  tricks. This exact interaction is a required unit-test case, not an
+  assumption.
 - `ana_draft_seo`'s fields were already sanitized once, for a
   **different context** (HTML body, via `wp_kses_post()` inside
   `AiContentGenerator`, Milestone 4). That does not make them safe for

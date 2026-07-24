@@ -88,6 +88,13 @@ final class ModuleManifest
             // public ActionInterface/ActionRegistryInterface/WorkflowRunner
             // surface once the action milestone lands.
             \AINewsAutomator\Publishing\PublishingServiceProvider::class,
+
+            // SEO ninth: depends on Publishing (DraftSeoRepositoryInterface,
+            // read-only) and Research (SessionRepositoryInterface, for
+            // internal-link suggestions). The first module whose output
+            // renders on the public wp_head path rather than only
+            // admin/REST/cron/queue — see planning/MODULE_9_SEO_ENGINE_DESIGN.md.
+            \AINewsAutomator\Seo\SeoServiceProvider::class,
         ];
 
         /**

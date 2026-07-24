@@ -48,9 +48,9 @@ if (!function_exists('current_time')) {
 }
 
 if (!function_exists('wp_json_encode')) {
-    function wp_json_encode(mixed $data): string|false
+    function wp_json_encode(mixed $data, int $flags = 0, int $depth = 512): string|false
     {
-        return json_encode($data);
+        return json_encode($data, $flags, $depth);
     }
 }
 
@@ -63,6 +63,13 @@ if (!function_exists('esc_html__')) {
 
 if (!function_exists('esc_html')) {
     function esc_html(string $text): string
+    {
+        return htmlspecialchars($text, ENT_QUOTES);
+    }
+}
+
+if (!function_exists('esc_attr')) {
+    function esc_attr(string $text): string
     {
         return htmlspecialchars($text, ENT_QUOTES);
     }
@@ -387,6 +394,7 @@ if (!class_exists('WP_Post')) {
         public string $post_content = '';
         public string $post_status = 'draft';
         public string $post_date = '';
+        public string $post_modified = '';
 
         /**
          * @param array<string, mixed> $data
@@ -398,6 +406,7 @@ if (!class_exists('WP_Post')) {
             $this->post_content = (string) ($data['post_content'] ?? '');
             $this->post_status = (string) ($data['post_status'] ?? 'draft');
             $this->post_date = (string) ($data['post_date'] ?? '');
+            $this->post_modified = (string) ($data['post_modified'] ?? $this->post_date);
         }
     }
 }
@@ -419,5 +428,122 @@ if (!function_exists('wp_strip_all_tags')) {
     function wp_strip_all_tags(string $text): string
     {
         return trim(strip_tags($text));
+    }
+}
+
+// --- Additional stubs for Module 9 (SEO) unit tests ---
+// Tests configure these via $GLOBALS['__ana_test_permalinks'][$postId],
+// $GLOBALS['__ana_test_thumbnails'][$postId], $GLOBALS['__ana_test_categories'][$postId]
+// (list of ['term_id' => int, 'name' => string]), and reuse
+// $GLOBALS['__ana_test_posts'] (already seeded via get_post() above) for get_posts().
+
+if (!function_exists('get_permalink')) {
+    function get_permalink(int $postId): string|false
+    {
+        return $GLOBALS['__ana_test_permalinks'][$postId] ?? false;
+    }
+}
+
+if (!function_exists('get_the_post_thumbnail_url')) {
+    function get_the_post_thumbnail_url(int $postId, string $size = 'post-thumbnail'): string|false
+    {
+        return $GLOBALS['__ana_test_thumbnails'][$postId] ?? false;
+    }
+}
+
+if (!function_exists('get_bloginfo')) {
+    function get_bloginfo(string $show = ''): string
+    {
+        return $GLOBALS['__ana_test_bloginfo'][$show] ?? 'Test Site';
+    }
+}
+
+if (!function_exists('home_url')) {
+    function home_url(string $path = ''): string
+    {
+        return 'https://example.test' . $path;
+    }
+}
+
+if (!function_exists('get_the_category')) {
+    /**
+     * @return list<object{term_id: int, name: string}>
+     */
+    function get_the_category(int $postId): array
+    {
+        return $GLOBALS['__ana_test_categories'][$postId] ?? [];
+    }
+}
+
+if (!function_exists('get_category_link')) {
+    function get_category_link(int $termId): string|false
+    {
+        return 'https://example.test/category/' . $termId;
+    }
+}
+
+if (!function_exists('esc_url')) {
+    function esc_url(string $url): string
+    {
+        return htmlspecialchars($url, ENT_QUOTES);
+    }
+}
+
+if (!function_exists('is_singular')) {
+    function is_singular(): bool
+    {
+        return $GLOBALS['__ana_test_is_singular'] ?? true;
+    }
+}
+
+if (!function_exists('get_the_ID')) {
+    function get_the_ID(): int|false
+    {
+        return $GLOBALS['__ana_test_current_post_id'] ?? false;
+    }
+}
+
+if (!function_exists('get_posts')) {
+    /**
+     * A narrow stand-in over $GLOBALS['__ana_test_posts']/__ana_test_postmeta —
+     * recognizes only the specific args this project's repositories/services
+     * actually pass (post_type, post_status, meta_key, numberposts, exclude,
+     * fields), not a general WP_Query implementation.
+     *
+     * @param array<string, mixed> $args
+     * @return list<int|WP_Post>
+     */
+    function get_posts(array $args = []): array
+    {
+        $status = $args['post_status'] ?? 'publish';
+        $metaKey = $args['meta_key'] ?? null;
+        $exclude = array_map('intval', $args['exclude'] ?? []);
+        $fields = $args['fields'] ?? '';
+        $limit = $args['numberposts'] ?? -1;
+
+        $results = [];
+        foreach ($GLOBALS['__ana_test_posts'] ?? [] as $postId => $data) {
+            $postId = (int) $postId;
+
+            if (in_array($postId, $exclude, true)) {
+                continue;
+            }
+
+            if ($status !== 'any' && ($data['post_status'] ?? 'draft') !== $status) {
+                continue;
+            }
+
+            if ($metaKey !== null && !isset($GLOBALS['__ana_test_postmeta'][$postId][$metaKey])) {
+                continue;
+            }
+
+            $results[] = $fields === 'ids' ? $postId : new WP_Post(array_merge(['ID' => $postId], $data));
+
+            if ($limit > 0 && count($results) >= $limit) {
+                break;
+            }
+        }
+
+        return $results;
     }
 }

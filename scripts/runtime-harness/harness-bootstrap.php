@@ -233,6 +233,21 @@ function esc_url_raw(string $url): string
     return $url;
 }
 
+function esc_url(string $url): string
+{
+    return htmlspecialchars($url, ENT_QUOTES);
+}
+
+function is_singular(): bool
+{
+    return $GLOBALS['__is_singular'] ?? true;
+}
+
+function get_the_ID(): int|false
+{
+    return $GLOBALS['__current_post_id'] ?? false;
+}
+
 function esc_sql(mixed $data): mixed
 {
     global $wpdb;
@@ -501,6 +516,7 @@ class WP_Post
     public string $post_content = '';
     public string $post_status = 'draft';
     public string $post_date = '';
+    public string $post_modified = '';
 
     /** @param array<string, mixed> $data */
     public function __construct(array $data)
@@ -510,6 +526,7 @@ class WP_Post
         $this->post_content = (string) ($data['post_content'] ?? '');
         $this->post_status = (string) ($data['post_status'] ?? 'draft');
         $this->post_date = (string) ($data['post_date'] ?? '');
+        $this->post_modified = (string) ($data['post_modified'] ?? $this->post_date);
     }
 }
 
@@ -532,6 +549,87 @@ function get_post_meta(int $postId, string $key = '', bool $single = false): mix
 function wp_strip_all_tags(string $text): string
 {
     return trim(strip_tags($text));
+}
+
+/* ---------------- SEO / front-end rendering (Module 9) --------------- */
+// Configure via $GLOBALS['__permalinks'][$postId], $GLOBALS['__thumbnails'][$postId],
+// $GLOBALS['__bloginfo'][$show], $GLOBALS['__categories'][$postId] (list of
+// ['term_id' => int, 'name' => string]) — reuses $GLOBALS['__posts']/__postmeta
+// (already populated above) for get_posts().
+
+function get_permalink(int $postId): string|false
+{
+    return $GLOBALS['__permalinks'][$postId] ?? false;
+}
+
+function get_the_post_thumbnail_url(int $postId, string $size = 'post-thumbnail'): string|false
+{
+    return $GLOBALS['__thumbnails'][$postId] ?? false;
+}
+
+function get_bloginfo(string $show = ''): string
+{
+    return $GLOBALS['__bloginfo'][$show] ?? 'Harness Test Site';
+}
+
+function home_url(string $path = ''): string
+{
+    return 'https://harness.test' . $path;
+}
+
+/**
+ * @return list<object{term_id: int, name: string}>
+ */
+function get_the_category(int $postId): array
+{
+    return $GLOBALS['__categories'][$postId] ?? [];
+}
+
+function get_category_link(int $termId): string|false
+{
+    return 'https://harness.test/category/' . $termId;
+}
+
+/**
+ * A narrow stand-in — recognizes only the specific args this project's
+ * own repositories/services actually pass (post_type, post_status,
+ * meta_key, numberposts, exclude, fields), not a general WP_Query.
+ *
+ * @param array<string, mixed> $args
+ * @return list<int|WP_Post>
+ */
+function get_posts(array $args = []): array
+{
+    $status = $args['post_status'] ?? 'publish';
+    $metaKey = $args['meta_key'] ?? null;
+    $exclude = array_map('intval', $args['exclude'] ?? []);
+    $fields = $args['fields'] ?? '';
+    $limit = $args['numberposts'] ?? -1;
+
+    $results = [];
+    foreach ($GLOBALS['__posts'] ?? [] as $postId => $data) {
+        $postId = (int) $postId;
+
+        if (in_array($postId, $exclude, true)) {
+            continue;
+        }
+
+        if ($status !== 'any' && ($data['post_status'] ?? 'draft') !== $status) {
+            continue;
+        }
+
+        if ($metaKey !== null && !isset($GLOBALS['__postmeta'][$postId][$metaKey])) {
+            continue;
+        }
+
+        $results[] = $fields === 'ids' ? $postId : new WP_Post(array_merge(['ID' => $postId], $data));
+
+        if ($limit > 0 && count($results) >= $limit) {
+            break;
+        }
+    }
+
+    return $results;
 }
 
 /* ---------------- REST API (minimal) --------------------------------- */

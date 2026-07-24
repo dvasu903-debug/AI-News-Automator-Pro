@@ -29,6 +29,9 @@
         <testsuite name="Publishing">
             <directory>tests/Publishing</directory>
         </testsuite>
+        <testsuite name="Seo">
+            <directory>tests/Seo</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
