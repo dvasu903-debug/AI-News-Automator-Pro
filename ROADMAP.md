@@ -15,6 +15,59 @@ Automator Pro), Vertical (News).
 | 6 | Research Engine | Frozen |
 | 7 | Workflow Engine | Frozen — 2026-07-21 |
 | 8 | Publishing Engine | **Milestone 4 frozen — 2026-07-24** (Milestone 5 scope not yet defined) |
+| 9 | SEO Engine | **Frozen — 2026-07-24** |
+
+## Module 9 — SEO Engine freeze record
+
+**Status: FROZEN — 2026-07-24.** Identified via a project-wide
+architecture review (not invented — named three separate times in
+existing project documents: `ARCHITECTURE_PLAN.md`'s original module
+order, `MODULE_8_PUBLISHING_ENGINE_DESIGN.md` §11, and Milestone 4's own
+`PostProcessAction` code comments) and approved by the owner with two
+requested refinements before implementation. See
+`planning/MODULE_9_SEO_ENGINE_DESIGN.md` for the full architecture
+review and design, and ADR-0020 for the concrete decisions made during
+implementation.
+
+Module 9 adds `SeoServiceProvider` (ninth in `ModuleManifest`) and its
+full surface: `MetaTagBuilder` (constructs SEO tag data, per owner
+refinement request), `SeoProviderInterface`/`DefaultSeoProvider` (an
+empty extensibility seam for future providers, per the second owner
+refinement request), `SchemaOrgGenerator` (schema.org `NewsArticle`
+JSON-LD), `CanonicalUrlResolver` (always computed live via
+`get_permalink()`, never a stored snapshot), `InternalLinkSuggester`
+(admin-only, deterministic, no AI call), `BreadcrumbGenerator`, and
+`SeoHeadRenderer` — the module's one output/escaping boundary, and the
+first module in this project to render on the public, anonymous-visitor-
+facing `wp_head` hook rather than only admin/REST/cron/queue contexts.
+No new table (reuses Publishing Milestone 1's previously-unused
+`ana_draft_seo`, read-only); zero changes to any frozen Module 1–8 file
+beyond the three designated append points every prior module has also
+used (`ModuleManifest.php`, `phpunit.xml.dist`, `verify-runtime.sh`).
+
+Full local pipeline (`php -l`, PHPUnit — 600 tests, 1 documented
+incomplete carried from Milestone 2 — PHPCS clean on every new file)
+and two independent runtime passes both passed: a local real-database
+harness (MariaDB + WordPress 6.8.3 `wpdb`/`dbDelta` via the production
+boot path), including this milestone's new escaping-regression test
+class (proving a hostile string never survives unescaped in an HTML
+attribute, a URL, or a JSON-LD-inside-`<script>` context); and a live
+Hostinger smoke test on the actual deployed artifact — the first in
+this project to verify public-facing rendered output over real
+anonymous HTTP, not just admin/REST/CLI-side behavior. Evidence trail:
+`docs/verification/2026-07-24-module-9-seo-engine-runtime-verification.md`.
+
+Three real defects were found and fixed during this milestone's process,
+none in Module 9's own `src/` code: two in test/harness infrastructure
+(a `wp_json_encode()` test stub silently ignoring its `$flags`
+parameter; the runtime harness's `get_permalink()` shim not matching
+real WordPress's always-returns-a-URL behavior), and one in the live
+site's deployment/activation state — replacing an already-active
+plugin's directory with a fresh `git clone` doesn't retrigger
+`register_activation_hook()`, so pending migrations (`wp_ana_draft_seo`
+among them) never ran until a genuine `wp plugin deactivate` /
+`wp plugin activate` cycle forced the activation transition. Documented
+as a permanent operational note: `docs/DEPLOYMENT.md`.
 
 ## Module 8 — Milestone 4 (AI-generation pipeline) freeze record
 

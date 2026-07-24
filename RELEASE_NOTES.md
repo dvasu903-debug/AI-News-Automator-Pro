@@ -1,5 +1,81 @@
 # Release Notes
 
+## 2.0.0-dev — Module 9 (SEO Engine) frozen
+
+**Date:** 2026-07-24
+
+### What's new
+
+Module 9 adds the SEO Engine identified via a project-wide architecture
+review as the correct next module (named three separate times across
+existing project documents, not invented). `SeoServiceProvider` (ninth
+in `ModuleManifest`) wires: `MetaTagBuilder` (constructs canonical URL,
+Open Graph, Twitter Card, and schema.org `NewsArticle` JSON-LD tag data
+from the frozen, previously-unused `ana_draft_seo` table),
+`SeoProviderInterface`/`DefaultSeoProvider` (an extensibility seam for
+future SEO providers, per an owner-requested design refinement),
+`InternalLinkSuggester` (admin-only, deterministic, no AI call — ranks
+published posts by shared research-entity count), `BreadcrumbGenerator`,
+and `SeoHeadRenderer` — the module's one rendering/escaping boundary,
+and the first module in this project's history to run on the public,
+anonymous-visitor-facing `wp_head` hook. See `docs/adr/0020-*.md` for
+the full trust-boundary design: HTML-attribute escaping, URL escaping,
+and `JSON_HEX_TAG | JSON_HEX_AMP` JSON-LD escaping (chosen over the
+initially-proposed `JSON_UNESCAPED_SLASHES`, which was corrected during
+implementation), applied at every output site regardless of any
+upstream sanitization already performed for a different context.
+
+### Fixed
+
+Two test/harness-infrastructure defects were found and fixed while
+building this milestone's tests (not `src/`): `tests/bootstrap.php`'s
+`wp_json_encode()` stub silently ignored its `$flags` parameter, and the
+runtime harness's `get_permalink()` shim returned `false` for any post
+without an explicitly pre-seeded permalink, unlike real WordPress. One
+deployment/operational defect was found and fixed during the live
+Hostinger pass: replacing an already-active plugin's directory with a
+fresh `git clone` doesn't retrigger `register_activation_hook()`, so
+pending migrations never ran until a genuine deactivate/activate cycle
+forced the transition — documented as a permanent operational note in
+`docs/DEPLOYMENT.md`, not an ADR (no architectural decision changed).
+
+### Validated
+
+Full local pipeline (`php -l`, PHPUnit — 600 tests, PHPCS clean on every
+new file, including a new escaping-regression test class proving a
+hostile string never survives unescaped in an HTML attribute, a URL, or
+a JSON-LD-inside-`<script>` context) plus two independent runtime
+passes: a local real-database harness (MariaDB + WordPress 6.8.3
+`wpdb`/`dbDelta` via the production boot path) and a live Hostinger
+smoke test on the actual deployed artifact
+(`scripts/hostinger/module9-smoke-test.php`) — the first in this
+project to verify public-facing rendered output over real anonymous
+HTTP (a live `wp_remote_get()` fetch of the real post's permalink),
+not just admin/REST/CLI-side behavior. All ten smoke-test assertions
+passed, including the live-fetch check passing cleanly on the first
+attempt. Full report:
+`docs/verification/2026-07-24-module-9-seo-engine-runtime-verification.md`.
+
+### Known, documented, non-blocking findings
+
+- `InternalLinkSuggester` has no dedicated runtime-harness coverage
+  (unit tests only) — admin-editor-only, reachable from no automated
+  public/API path this milestone.
+- No human-editable override path exists for `ana_draft_seo` fields —
+  deliberate, deferred scope (ADR-0020 decision 8).
+- `canonical_url` in `ana_draft_seo` remains `null` — deliberately never
+  backfilled by this module; computed live via `get_permalink()`
+  instead (ADR-0020 decision 3).
+
+### Compatibility
+
+No breaking changes to Modules 1–8. No changes to any frozen module
+beyond the three designated append points every prior module has also
+used (`ModuleManifest.php`'s provider list, `phpunit.xml.dist`'s
+testsuite list, `verify-runtime.sh`'s `FULL_SEQUENCE`). `ana_draft_seo`
+gains no new writer — Module 9 reads it only; `PostProcessAction`
+(Publishing, Milestone 4) remains its sole writer.
+
 ## 2.0.0-dev — Module 8 Milestone 4 (AI-generation pipeline) frozen
 
 **Date:** 2026-07-24

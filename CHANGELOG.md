@@ -6,6 +6,31 @@ project is pre-release; entries below cover the 2.0.0-dev line.
 ## [Unreleased — 2.0.0-dev]
 
 ### Added
+- **SEO Engine (Module 9):** `SeoServiceProvider` (ninth in
+  `ModuleManifest`) adds the plugin's first public, anonymous-visitor-
+  facing render path (`wp_head`). `Seo\Services\MetaTagBuilder`
+  constructs all SEO tag data (canonical URL via a live
+  `CanonicalUrlResolver::resolve()`/`get_permalink()` call, Open Graph,
+  Twitter Card, and `SchemaOrgGenerator`'s schema.org `NewsArticle`
+  JSON-LD) from the frozen `DraftSeoRepositoryInterface` (read-only —
+  `ana_draft_seo`, Publishing Milestone 1, previously unused); a new
+  `Seo\Contracts\SeoProviderInterface` is the extensibility seam for
+  future providers (Google Discover, WooCommerce, News SEO), currently
+  bound solely to `DefaultSeoProvider`. `SeoHeadRenderer` is the
+  module's only output boundary — it renders `MetaTagBuilder`'s data,
+  escaping every field at its actual output context
+  (`esc_attr()`/`esc_url()` for HTML attributes, `wp_json_encode(...,
+  JSON_HEX_TAG | JSON_HEX_AMP)` for the JSON-LD block, which eliminates
+  a `</script>` tag-breakout risk regardless of string content) rather
+  than trusting any upstream sanitization. `InternalLinkSuggester`
+  (admin-editor-only, deterministic, never calls `AIManager`) ranks
+  other published posts by shared extracted-entity count with the
+  current post's linked research session. `BreadcrumbGenerator` and
+  `SeoHealthCheck` round out the module. See ADR-0020 for the full
+  trust-boundary and extensibility-seam reasoning, and
+  `planning/MODULE_9_SEO_ENGINE_DESIGN.md` for the architecture review
+  that identified this as the correct next module and the design it
+  followed.
 - **Publishing (Module 8, Milestone 4):** The AI-generation pipeline
   ADR-0018 deferred. `Publishing\Services\AiContentGenerator`
   (`ContentGeneratorInterface`) turns a completed research session's

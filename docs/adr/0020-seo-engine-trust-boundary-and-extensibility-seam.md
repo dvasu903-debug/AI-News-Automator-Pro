@@ -127,6 +127,14 @@ re-run — noted for that future milestone, not decided now.
   the Hostinger smoke test script locally before hand-off; the fix adds
   a fallback only when no explicit value was configured, so no existing
   checklist's explicit-permalink assertions changed behavior.
+- The live Hostinger smoke test surfaced a deployment/operational
+  finding unrelated to this module's own code: a site whose plugin
+  directory was replaced with a fresh `git clone` without an explicit
+  deactivate/activate cycle never re-fires `register_activation_hook()`,
+  so migrations added after that site's last real activation (including
+  this module's dependency, `ana_draft_seo`) never ran until forced.
+  Documented as a permanent operational note in `docs/DEPLOYMENT.md`,
+  not an ADR — no architectural decision changed.
 
 ## Alternatives Considered
 

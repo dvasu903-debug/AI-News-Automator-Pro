@@ -11,10 +11,12 @@ implementation (`SeoServiceProvider`, `SeoProviderInterface`/
 
 ## Runtime environment
 
-**This session has no SSH or hosting credentials for Hostinger**
-(`tfgadgets.com`) — the same situation every prior milestone's runtime
-verification session has documented. The checklist below was executed
-against a locally provisioned real-database runtime instead:
+**This session has no SSH or hosting credentials for Hostinger** — the
+same situation every prior milestone's runtime verification session has
+documented. The checklist below was executed against a locally
+provisioned real-database runtime instead; the live Hostinger smoke test
+(see below) was run separately by the site owner directly on the
+`autocutai.in` production deployment:
 
 | Component | Version / detail |
 |---|---|
@@ -92,70 +94,88 @@ the runtime harness's `get_permalink()` fallback gap, found while
 validating the Hostinger smoke test script) were both test/harness
 -infrastructure gaps, not defects in Module 9's own `src/` code.
 
-## Hostinger smoke test — script ready, not yet run in this session
+## Hostinger smoke test — executed, PASSED
 
-`scripts/hostinger/module9-smoke-test.php` (WP-CLI `eval-file`, no
-`declare(strict_types=1)` — Milestone 4's fix applied from the start
-this time) is written, validated end-to-end against the local harness
-(simulating `wp eval-file`'s actual `eval()`-based mechanics, exactly
-as Milestone 4's script was re-validated after its `strict_types`
-fatal), and ready to run. It covers:
+Run by the site owner on `autocutai.in` via
+`wp eval-file scripts/hostinger/module9-smoke-test.php`. All ten
+assertions passed:
 
-1. `SeoServiceProvider` resolution + `SeoHealthCheck`.
-2. A real, published test post with a real `ana_draft_seo` row —
-   internal `SeoHeadRenderer::renderFor()` output check (authoritative).
-3. **A genuinely new smoke-test dimension**: an actual anonymous HTTP
-   fetch (`wp_remote_get()`) of the real post's real permalink, checking
-   the live-served HTML for canonical/OG/JSON-LD tags — the first
-   Hostinger smoke test verifying public-facing rendered output rather
-   than only admin/REST/CLI-side behavior. A stale response from a
-   page cache immediately after post creation is treated as an
-   inconclusive warning, not a failure, since that is an environmental
-   concern rather than evidence of a code defect; the internal render
-   check remains authoritative.
-4. The hostile-string escaping regression, against a second real,
-   published test post.
-5. Cleanup of all test data in a `finally` block regardless of outcome.
+```
+[PASS] 1a: SeoHeadRenderer resolves
+[PASS] 1b: SeoHealthCheck resolves and runs
+[PASS] 2a: real post created and published
+[PASS] 3a: canonical link rendered
+[PASS] 3b: og:title rendered
+[PASS] 3c: JSON-LD NewsArticle block rendered
+[PASS] 4a: real permalink resolves
+[PASS] 4b: live fetched page contains canonical/OG/JSON-LD tags
+[PASS] 5a: hostile og:title never appears as a literal script tag
+[PASS] 5b: hostile description never appears as a literal img/onerror tag
+Success: MODULE 9 HOSTINGER SMOKE TEST PASSED
+```
 
-No live AI provider call is relevant here at all — this module makes
-none, so there is no cost-gating question this time.
+Notably, 4b (the new public-HTTP-fetch dimension — an actual anonymous
+`wp_remote_get()` against the real permalink, checking the live-served
+HTML) passed cleanly on the first attempt rather than landing in the
+documented WARN/inconclusive path — no page-cache staleness was
+observed. This is the first Hostinger smoke test in this project to
+verify public-facing rendered output, not just admin/REST/CLI-side
+behavior.
 
-**This session cannot run it** — no Hostinger credentials, per every
-prior milestone's own documented limitation. The site owner (or a
-future session with access) needs to run:
-`wp eval-file scripts/hostinger/module9-smoke-test.php` and report the
-result before this milestone can be frozen, matching the exact gate
-Milestones 2 and 4 were both held to.
+**One real deployment defect was found and fixed during this pass** —
+not in `src/`, but in the deployment/activation state of the site
+itself. The smoke test first failed with
+`StorageException: Insert into "wp_ana_draft_seo" failed: Table
+'...' doesn't exist`. Investigation (`wp db query` against
+`ana_schema_migrations`) showed the site's recorded migrations topped
+out at `20260715400004` (Workflow module) — meaning this site's only
+real WordPress activation transition happened before Milestone 4/Module
+9's later migrations existed in the codebase. A prior directory swap
+(replacing a stale, non-git checkout with a fresh `git clone`) left the
+plugin's active flag in `wp_options` unchanged, so `wp plugin activate`
+was a no-op that never re-fired `register_activation_hook()`; the
+self-healing `plugins_loaded` check only covers migrations added after
+a site's last real activation, not this case. Fix: a genuine
+deactivate→activate cycle
+(`wp plugin deactivate ai-news-automator-pro && wp plugin activate
+ai-news-automator-pro`), which triggered `Activator::activate()`'s
+unconditional `MigrationRunner::migrate()` call, created
+`wp_ana_draft_seo` (and confirmed no other migrations were silently
+missing), and the smoke test then passed end-to-end. Documented as a
+permanent operational note, not an ADR (no architectural decision
+changed): `docs/DEPLOYMENT.md`.
+
+No live AI provider call was relevant here — this module makes none, so
+there was no cost-gating question this time.
 
 ## Remaining known limitations
 
-1. **Not executed on Hostinger** — see above; the residual gap blocking
-   an unconditional freeze recommendation, not a logic-level defect.
-2. `InternalLinkSuggester` has no dedicated runtime-harness coverage
+1. `InternalLinkSuggester` has no dedicated runtime-harness coverage
    (only unit tests) — it is admin-editor-only and reachable from no
    automated public/API path in this milestone, so the unit-test
    coverage (ranking, published-only filtering, no-AI-dependency proof)
    is judged sufficient for this first milestone; may warrant a runtime
    checklist addition if a REST/admin-UI surface is added later.
-3. No human-editable override path exists for `ana_draft_seo` fields —
+2. No human-editable override path exists for `ana_draft_seo` fields —
    deliberate, deferred scope (ADR-0020 decision 8), not a defect.
-4. `canonical_url` in `ana_draft_seo` remains `null` — deliberately
+3. `canonical_url` in `ana_draft_seo` remains `null` — deliberately
    never backfilled by this module (ADR-0020 decision 3), not a defect.
-5. Pre-existing PHPCS findings in frozen modules remain untouched, per
+4. Pre-existing PHPCS findings in frozen modules remain untouched, per
    established project policy.
 
 ## Recommendation
 
-**Freeze is recommended, conditional on the Hostinger smoke test.**
-Every locally-verifiable checklist item has passed with real,
-reproducible, assertion-backed evidence against a real database and the
-real production boot path, including a new class of test this
-milestone required (the escaping-regression suite) and the two
-design-phase refinements the owner requested (`MetaTagBuilder`,
-`SeoProviderInterface`) now proven correct at runtime. Two real
-defects were found and fixed during this milestone's own process (both
-in test/harness infrastructure, not `src/`), consistent with this
-project's history of runtime verification surfacing real gaps rather
-than rubber-stamping. The one open item is the Hostinger smoke test,
-which needs to be run by the site owner (or a session with access)
-before this milestone can be marked frozen.
+**Module 9 is frozen.** Every locally-verifiable checklist item and the
+live Hostinger smoke test have both passed with real, reproducible,
+assertion-backed evidence against a real database and the real
+production boot path, including a new class of test this milestone
+required (the escaping-regression suite) and the two design-phase
+refinements the owner requested (`MetaTagBuilder`,
+`SeoProviderInterface`) now proven correct at runtime, on the real
+production stack, over real public HTTP. Three real defects were found
+and fixed during this milestone's own process: two in test/harness
+infrastructure (`wp_json_encode()`'s flags stub, the harness's
+`get_permalink()` fallback), not `src/`; one in the live site's
+deployment/activation state, not `src/` either (see `docs/DEPLOYMENT.md`)
+— consistent with this project's history of runtime verification
+surfacing real gaps rather than rubber-stamping. No open items remain.
